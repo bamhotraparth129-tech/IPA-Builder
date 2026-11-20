@@ -1,11 +1,15 @@
 name: Build ViperSnake IPA
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -15,7 +19,7 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
-      - name: Build iOS app
+      - name: Build unsigned iOS app
         run: |
           xcodebuild \
             -project ViperSnake.xcodeproj \
@@ -23,18 +27,19 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGNING_ALLOWED=NO \
+            VALIDATE_PRODUCT=NO \
+            build
 
-      - name: Package IPA
+      - name: Package ViperSnake.ipa
         run: |
           mkdir -p Payload
-          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -maxdepth 1 | head -n 1)
-          cp -R "$APP_PATH" Payload/
+          cp -r build/Build/Products/Release-iphoneos/ViperSnake.app Payload/
           zip -r ViperSnake.ipa Payload
 
-      - name: Upload IPA artifact
+      - name: Upload ViperSnake.ipa artifact
         uses: actions/upload-artifact@v4
         with:
           name: ViperSnake-ipa
