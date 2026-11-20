@@ -1,11 +1,11 @@
-name: ViperSnake
+name: Minerva
 options:
   bundleIdPrefix: com.parth
   deploymentTarget:
     iOS: "16.0"
 
 targets:
-  ViperSnake:
+  Minerva:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
@@ -13,12 +13,12 @@ targets:
       - path: Sources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.parth.ViperSnake
-        PRODUCT_NAME: ViperSnake
+        PRODUCT_BUNDLE_IDENTIFIER: com.parth.Minerva
+        PRODUCT_NAME: Minerva
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: ViperSnake
+        INFOPLIST_KEY_CFBundleDisplayName: Minerva
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         SWIFT_VERSION: "5.0"
