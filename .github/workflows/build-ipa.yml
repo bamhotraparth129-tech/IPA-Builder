@@ -1,4 +1,4 @@
-name: Build ViperSnake IPA
+name: Build Minerva IPA
 
 on:
   push:
@@ -22,8 +22,8 @@ jobs:
       - name: Build unsigned iOS app
         run: |
           xcodebuild \
-            -project ViperSnake.xcodeproj \
-            -scheme ViperSnake \
+            -project Minerva.xcodeproj \
+            -scheme Minerva \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
@@ -33,14 +33,14 @@ jobs:
             VALIDATE_PRODUCT=NO \
             build
 
-      - name: Package ViperSnake.ipa
+      - name: Package Minerva.ipa
         run: |
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/ViperSnake.app Payload/
-          zip -r ViperSnake.ipa Payload
+          cp -r build/Build/Products/Release-iphoneos/Minerva.app Payload/
+          zip -r Minerva.ipa Payload
 
-      - name: Upload ViperSnake.ipa artifact
+      - name: Upload Minerva.ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ViperSnake-ipa
-          path: ViperSnake.ipa
+          name: Minerva-ipa
+          path: Minerva.ipa
