@@ -1,5 +1,5 @@
 import SwiftUI
-import PDFKit
+import UniformTypeIdentifiers
 import UIKit
 
 // MARK: - Models
@@ -42,7 +42,12 @@ enum ReportPeriod: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    func dateBounds(now: Date = Date(), customStart: Date, customEnd: Date, calendar: Calendar = .current) -> (start: Date?, end: Date?) {
+    func dateBounds(
+        now: Date = Date(),
+        customStart: Date,
+        customEnd: Date,
+        calendar: Calendar = .current
+    ) -> (start: Date?, end: Date?) {
         switch self {
         case .thisMonth:
             let comps = calendar.dateComponents([.year, .month], from: now)
@@ -98,7 +103,7 @@ struct PDFDocumentTransfer: Transferable {
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .pdf) { item in
-            SentTransferredFile(item.url, allowCopying: true)
+            SentTransferredFile(item.url)
         }
     }
 }
@@ -122,7 +127,7 @@ enum PDFExporter {
         let totalExpense = filtered.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
         let net = totalIncome - totalExpense
 
-        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4 points
+        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4
         let margin: CGFloat = 36
         let contentWidth = pageRect.width - (margin * 2)
 
@@ -140,7 +145,6 @@ enum PDFExporter {
                 context.beginPage()
                 currentY = margin
 
-                // Top banner
                 let headerRect = CGRect(x: margin, y: currentY, width: contentWidth, height: 54)
                 UIColor(red: 0.06, green: 0.24, blue: 0.19, alpha: 1.0).setFill()
                 UIBezierPath(roundedRect: headerRect, cornerRadius: 8).fill()
@@ -155,11 +159,11 @@ enum PDFExporter {
                 )
 
                 let subAttrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 11),
+                    .font: UIFont.systemFont(ofSize: 10.5),
                     .foregroundColor: UIColor(white: 0.92, alpha: 1.0)
                 ]
                 NSString(string: "Period: \(periodLabel)  •  Generated: \(generatedStamp)").draw(
-                    at: CGPoint(x: headerRect.minX + 14, y: headerRect.minY + 33),
+                    at: CGPoint(x: headerRect.minX + 14, y: headerRect.minY + 34),
                     withAttributes: subAttrs
                 )
 
@@ -168,7 +172,6 @@ enum PDFExporter {
 
             startNewPage()
 
-            // Summary cards row
             let cardGap: CGFloat = 10
             let cardWidth = (contentWidth - (cardGap * 2)) / 3
             let cardHeight: CGFloat = 56
@@ -206,18 +209,16 @@ enum PDFExporter {
 
             currentY += cardHeight + 20
 
-            // Section heading
             let secAttrs: [NSAttributedString.Key: Any] = [
                 .font: UIFont.boldSystemFont(ofSize: 14),
                 .foregroundColor: UIColor.black
             ]
-            NSString(string: "Transactions (\(filtered.count))").draw(
+            NSString(string: "Entries (\(filtered.count))").draw(
                 at: CGPoint(x: margin, y: currentY),
                 withAttributes: secAttrs
             )
             currentY += 22
 
-            // Column headers
             let colHeaderAttrs: [NSAttributedString.Key: Any] = [
                 .font: UIFont.boldSystemFont(ofSize: 10),
                 .foregroundColor: UIColor.darkGray
@@ -241,7 +242,7 @@ enum PDFExporter {
                     .font: UIFont.italicSystemFont(ofSize: 12),
                     .foregroundColor: UIColor.gray
                 ]
-                NSString(string: "No transactions recorded in the selected period.").draw(
+                NSString(string: "No income or expense entries found for this period.").draw(
                     at: CGPoint(x: margin, y: currentY + 8),
                     withAttributes: emptyAttrs
                 )
@@ -685,7 +686,10 @@ struct BudgetSettingsView: View {
                     }
 
                     if let pdfItem = generatedPDF {
-                        ShareLink(item: pdfItem, preview: SharePreview("Rupaiya_Statement.pdf", image: Image(systemName: "doc.richtext.fill"))) {
+                        ShareLink(
+                            item: pdfItem,
+                            preview: SharePreview("Rupaiya_Statement.pdf", image: Image(systemName: "doc.richtext.fill"))
+                        ) {
                             Label("Share / Save PDF", systemImage: "square.and.arrow.up")
                                 .bold()
                         }
