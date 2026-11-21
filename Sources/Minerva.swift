@@ -33,6 +33,20 @@ enum TxCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+struct BudgetGoal: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    var limitAmount: Double
+    var category: TxCategory?
+
+    init(id: UUID = UUID(), name: String, limitAmount: Double, category: TxCategory? = nil) {
+        self.id = id
+        self.name = name
+        self.limitAmount = limitAmount
+        self.category = category
+    }
+}
+
 enum ReportPeriod: String, CaseIterable, Identifiable {
     case thisMonth = "This Month"
     case last7Days = "Last 7 Days"
@@ -322,16 +336,21 @@ enum PDFExporter {
 
 final class LedgerStore: ObservableObject {
     @Published var transactions: [TransactionItem] = [] {
-        didSet { save() }
+        didSet { saveTransactions() }
     }
-    @AppStorage("rupeeflow_monthly_budget") var monthlyBudget: Double = 10000
+    @Published var budgets: [BudgetGoal] = [] {
+        didSet { saveBudgets() }
+    }
 
-    private let fileURL: URL
+    private let transactionsURL: URL
+    private let budgetsURL: URL
 
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.fileURL = docs.appendingPathComponent("rupeeflow_transactions.json")
-        load()
+        self.transactionsURL = docs.appendingPathComponent("rupeeflow_transactions.json")
+        self.budgetsURL = docs.appendingPathComponent("rupeeflow_budgets.json")
+        loadTransactions()
+        loadBudgets()
     }
 
     var currentMonthExpenses: Double {
@@ -354,6 +373,34 @@ final class LedgerStore: ObservableObject {
         transactions.reduce(0) { total, item in
             item.type == .income ? total + item.amount : total - item.amount
         }
+    }
+
+    func spentAmount(for budget: BudgetGoal) -> Double {
+        let cal = Calendar.current
+        let now = Date()
+        return transactions
+            .filter { item in
+                guard item.type == .expense,
+                      cal.isDate(item.date, equalTo: now, toGranularity: .month) else {
+                    return false
+                }
+                if let cat = budget.category {
+                    return item.category == cat
+                }
+                return true
+            }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    func addBudget(name: String, limitAmount: Double, category: TxCategory?) {
+        guard limitAmount > 0 else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = trimmed.isEmpty ? (category?.rawValue ?? "General Budget") : trimmed
+        budgets.append(BudgetGoal(name: finalName, limitAmount: limitAmount, category: category))
+    }
+
+    func deleteBudgets(at offsets: IndexSet) {
+        budgets.remove(atOffsets: offsets)
     }
 
     func categoryTotals(type: TxType = .expense) -> [(category: TxCategory, total: Double)] {
@@ -396,20 +443,39 @@ final class LedgerStore: ObservableObject {
         return rows.joined(separator: "\n")
     }
 
-    private func save() {
+    private func saveTransactions() {
         if let data = try? JSONEncoder().encode(transactions) {
-            try? data.write(to: fileURL, options: .atomic)
+            try? data.write(to: transactionsURL, options: .atomic)
         }
     }
 
-    private func load() {
-        if let data = try? Data(contentsOf: fileURL),
+    private func loadTransactions() {
+        if let data = try? Data(contentsOf: transactionsURL),
            let decoded = try? JSONDecoder().decode([TransactionItem].self, from: data) {
             self.transactions = decoded
         } else {
             self.transactions = [
                 TransactionItem(title: "Monthly Allowance", amount: 12000, type: .income, category: .salary, note: "Starter entry"),
                 TransactionItem(title: "Lunch & Chai", amount: 180, type: .expense, category: .food, note: "Sample expense")
+            ]
+        }
+    }
+
+    private func saveBudgets() {
+        if let data = try? JSONEncoder().encode(budgets) {
+            try? data.write(to: budgetsURL, options: .atomic)
+        }
+    }
+
+    private func loadBudgets() {
+        if let data = try? Data(contentsOf: budgetsURL),
+           let decoded = try? JSONDecoder().decode([BudgetGoal].self, from: data) {
+            self.budgets = decoded
+        } else {
+            self.budgets = [
+                BudgetGoal(name: "Monthly Spend", limitAmount: 10000, category: nil),
+                BudgetGoal(name: "Food & Mess", limitAmount: 4000, category: .food),
+                BudgetGoal(name: "Travel & Auto", limitAmount: 2000, category: .travel)
             ]
         }
     }
@@ -431,11 +497,6 @@ struct LedgerHomeView: View {
     @ObservedObject var store: LedgerStore
     @State private var showingAddSheet = false
 
-    private var budgetProgress: Double {
-        guard store.monthlyBudget > 0 else { return 0 }
-        return min(store.currentMonthExpenses / store.monthlyBudget, 1.5)
-    }
-
     var body: some View {
         NavigationStack {
             List {
@@ -456,21 +517,35 @@ struct LedgerHomeView: View {
                                 .foregroundStyle(.red)
                                 .font(.subheadline.bold())
                         }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Monthly Budget")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text("\(formatINR(store.currentMonthExpenses)) / \(formatINR(store.monthlyBudget))")
-                                    .font(.caption.bold())
-                            }
-                            ProgressView(value: min(budgetProgress, 1.0))
-                                .tint(budgetProgress > 1.0 ? .red : .green)
-                        }
                     }
                     .padding(.vertical, 6)
+                }
+
+                if !store.budgets.isEmpty {
+                    Section("Named Budgets (This Month)") {
+                        ForEach(store.budgets) { budget in
+                            let spent = store.spentAmount(for: budget)
+                            let ratio = budget.limitAmount > 0 ? spent / budget.limitAmount : 0
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(budget.name)
+                                        .font(.subheadline.bold())
+                                    if let cat = budget.category {
+                                        Text("• \(cat.rawValue)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(formatINR(spent)) / \(formatINR(budget.limitAmount))")
+                                        .font(.caption.bold())
+                                }
+                                ProgressView(value: min(ratio, 1.0))
+                                    .tint(ratio > 1.0 ? .red : .green)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
                 }
 
                 Section("Recent Activity") {
@@ -619,7 +694,10 @@ struct BreakdownView: View {
 
 struct BudgetSettingsView: View {
     @ObservedObject var store: LedgerStore
-    @State private var budgetInput: String = ""
+
+    @State private var budgetName: String = ""
+    @State private var budgetLimitInput: String = ""
+    @State private var selectedCategory: TxCategory? = nil
 
     @State private var selectedPeriod: ReportPeriod = .thisMonth
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -640,14 +718,55 @@ struct BudgetSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Monthly Expense Budget (₹)") {
-                    TextField("Budget in ₹", text: $budgetInput)
+                Section("Add Named Budget (₹)") {
+                    TextField("Budget name (e.g., Mess, Travel, Gaming)", text: $budgetName)
+                    TextField("Limit amount in ₹", text: $budgetLimitInput)
                         .keyboardType(.decimalPad)
-                    Button("Update Budget") {
-                        let cleaned = budgetInput.replacingOccurrences(of: ",", with: "")
-                        if let val = Double(cleaned), val > 0 {
-                            store.monthlyBudget = val
+                    Picker("Scope", selection: $selectedCategory) {
+                        Text("All Expenses").tag(TxCategory?.none)
+                        ForEach(TxCategory.allCases) { cat in
+                            Text(cat.rawValue).tag(Optional(cat))
                         }
+                    }
+                    Button("Add Budget") {
+                        let cleaned = budgetLimitInput.replacingOccurrences(of: ",", with: "")
+                        if let val = Double(cleaned), val > 0 {
+                            store.addBudget(name: budgetName, limitAmount: val, category: selectedCategory)
+                            budgetName = ""
+                            budgetLimitInput = ""
+                            selectedCategory = nil
+                        }
+                    }
+                    .bold()
+                }
+
+                Section("Your Named Budgets") {
+                    if store.budgets.isEmpty {
+                        Text("No named budgets created yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(store.budgets) { budget in
+                            let spent = store.spentAmount(for: budget)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(budget.name)
+                                        .font(.headline)
+                                    Spacer()
+                                    Text("Limit: \(formatINR(budget.limitAmount))")
+                                        .font(.subheadline.bold())
+                                }
+                                HStack {
+                                    Text(budget.category?.rawValue ?? "All Expenses")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("Spent: \(formatINR(spent))")
+                                        .font(.caption)
+                                        .foregroundStyle(spent > budget.limitAmount ? .red : .secondary)
+                                }
+                            }
+                        }
+                        .onDelete(perform: store.deleteBudgets)
                     }
                 }
 
@@ -703,9 +822,6 @@ struct BudgetSettingsView: View {
                 }
             }
             .navigationTitle("Budget & Export")
-            .onAppear {
-                budgetInput = String(format: "%.0f", store.monthlyBudget)
-            }
         }
     }
 }
