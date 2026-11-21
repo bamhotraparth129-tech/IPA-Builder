@@ -14,6 +14,7 @@ enum PaymentMode: String, Codable, CaseIterable, Identifiable {
     case upi = "UPI"
     case cash = "Cash"
     case card = "Card"
+    case bank = "Bank"
 
     var id: String { rawValue }
 
@@ -22,6 +23,7 @@ enum PaymentMode: String, Codable, CaseIterable, Identifiable {
         case .upi: return "qrcode"
         case .cash: return "banknote"
         case .card: return "creditcard"
+        case .bank: return "building.columns.fill"
         }
     }
 }
@@ -1001,6 +1003,17 @@ struct ProfileTransferSheet: View {
         _toID = State(initialValue: second)
     }
 
+    private func syncTargetProfileIfNeeded() {
+        if !store.profiles.contains(where: { $0.id == fromID }) {
+            fromID = store.activeProfileID
+        }
+        if toID == fromID || !store.profiles.contains(where: { $0.id == toID }) {
+            if let alternate = store.profiles.first(where: { $0.id != fromID }) {
+                toID = alternate.id
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -1039,6 +1052,12 @@ struct ProfileTransferSheet: View {
             }
             .navigationTitle("Profile Transfer")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                syncTargetProfileIfNeeded()
+            }
+            .onChange(of: fromID) { _ in
+                syncTargetProfileIfNeeded()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
