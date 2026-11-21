@@ -47,6 +47,53 @@ struct BudgetGoal: Identifiable, Codable, Equatable {
     }
 }
 
+struct TransactionItem: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    var amount: Double
+    var type: TxType
+    var category: TxCategory
+    var date: Date
+    var note: String
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        amount: Double,
+        type: TxType,
+        category: TxCategory,
+        date: Date = Date(),
+        note: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.amount = amount
+        self.type = type
+        self.category = category
+        self.date = date
+        self.note = note
+    }
+}
+
+struct RupaiyaProfile: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    var transactions: [TransactionItem]
+    var budgets: [BudgetGoal]
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        transactions: [TransactionItem] = [],
+        budgets: [BudgetGoal] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.transactions = transactions
+        self.budgets = budgets
+    }
+}
+
 enum ReportPeriod: String, CaseIterable, Identifiable {
     case thisMonth = "This Month"
     case last7Days = "Last 7 Days"
@@ -84,34 +131,6 @@ enum ReportPeriod: String, CaseIterable, Identifiable {
     }
 }
 
-struct TransactionItem: Identifiable, Codable, Equatable {
-    let id: UUID
-    var title: String
-    var amount: Double
-    var type: TxType
-    var category: TxCategory
-    var date: Date
-    var note: String
-
-    init(
-        id: UUID = UUID(),
-        title: String,
-        amount: Double,
-        type: TxType,
-        category: TxCategory,
-        date: Date = Date(),
-        note: String = ""
-    ) {
-        self.id = id
-        self.title = title
-        self.amount = amount
-        self.type = type
-        self.category = category
-        self.date = date
-        self.note = note
-    }
-}
-
 struct PDFDocumentTransfer: Transferable {
     let url: URL
 
@@ -126,6 +145,7 @@ struct PDFDocumentTransfer: Transferable {
 
 enum PDFExporter {
     static func generateStatement(
+        profileName: String,
         transactions: [TransactionItem],
         periodLabel: String,
         from startDate: Date?,
@@ -167,7 +187,7 @@ enum PDFExporter {
                     .font: UIFont.boldSystemFont(ofSize: 20),
                     .foregroundColor: UIColor.white
                 ]
-                NSString(string: "Rupaiya — Statement").draw(
+                NSString(string: "Rupaiya — \(profileName)").draw(
                     at: CGPoint(x: headerRect.minX + 14, y: headerRect.minY + 10),
                     withAttributes: titleAttrs
                 )
@@ -256,7 +276,7 @@ enum PDFExporter {
                     .font: UIFont.italicSystemFont(ofSize: 12),
                     .foregroundColor: UIColor.gray
                 ]
-                NSString(string: "No income or expense entries found for this period.").draw(
+                NSString(string: "No income or expense entries found for this profile and period.").draw(
                     at: CGPoint(x: margin, y: currentY + 8),
                     withAttributes: emptyAttrs
                 )
@@ -322,7 +342,7 @@ enum PDFExporter {
             }
         }
 
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("Rupaiya_Statement.pdf")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("Rupaiya_\(profileName)_Statement.pdf")
         do {
             try data.write(to: tempURL, options: .atomic)
             return tempURL
@@ -335,22 +355,89 @@ enum PDFExporter {
 // MARK: - Store & CSV Export
 
 final class LedgerStore: ObservableObject {
-    @Published var transactions: [TransactionItem] = [] {
-        didSet { saveTransactions() }
+    @Published var profiles: [RupaiyaProfile] = [] {
+        didSet { saveProfiles() }
     }
-    @Published var budgets: [BudgetGoal] = [] {
-        didSet { saveBudgets() }
+    @Published var activeProfileID: UUID {
+        didSet { UserDefaults.standard.set(activeProfileID.uuidString, forKey: activeProfileKey) }
     }
 
-    private let transactionsURL: URL
-    private let budgetsURL: URL
+    private let profilesURL: URL
+    private let activeProfileKey = "rupaiya_active_profile_id"
 
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.transactionsURL = docs.appendingPathComponent("rupeeflow_transactions.json")
-        self.budgetsURL = docs.appendingPathComponent("rupeeflow_budgets.json")
-        loadTransactions()
-        loadBudgets()
+        self.profilesURL = docs.appendingPathComponent("rupeeflow_profiles.json")
+
+        let loadedProfiles = Self.loadProfilesFromDisk(url: profilesURL)
+        self.profiles = loadedProfiles
+
+        if let savedIDString = UserDefaults.standard.string(forKey: activeProfileKey),
+           let savedUUID = UUID(uuidString: savedIDString),
+           loadedProfiles.contains(where: { $0.id == savedUUID }) {
+            self.activeProfileID = savedUUID
+        } else {
+            self.activeProfileID = loadedProfiles.first?.id ?? UUID()
+        }
+    }
+
+    var activeProfileIndex: Int {
+        if let idx = profiles.firstIndex(where: { $0.id == activeProfileID }) {
+            return idx
+        }
+        return 0
+    }
+
+    var activeProfile: RupaiyaProfile {
+        profiles[activeProfileIndex]
+    }
+
+    var activeProfileName: String {
+        activeProfile.name
+    }
+
+    var transactions: [TransactionItem] {
+        activeProfile.transactions
+    }
+
+    var budgets: [BudgetGoal] {
+        activeProfile.budgets
+    }
+
+    func selectProfile(id: UUID) {
+        guard profiles.contains(where: { $0.id == id }) else { return }
+        activeProfileID = id
+    }
+
+    func addProfile(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let newProfile = RupaiyaProfile(
+            name: trimmed,
+            transactions: [],
+            budgets: [BudgetGoal(name: "Monthly Spend", limitAmount: 10000, category: nil)]
+        )
+        profiles.append(newProfile)
+        activeProfileID = newProfile.id
+    }
+
+    func renameActiveProfile(to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, profiles.indices.contains(activeProfileIndex) else { return }
+        profiles[activeProfileIndex].name = trimmed
+    }
+
+    func deleteProfile(at offsets: IndexSet) {
+        guard profiles.count > offsets.count else { return }
+        let removingActive = offsets.contains { profiles.indices.contains($0) && profiles[$0].id == activeProfileID }
+        profiles.remove(atOffsets: offsets)
+        if profiles.isEmpty {
+            let fallback = RupaiyaProfile(name: "Personal")
+            profiles = [fallback]
+            activeProfileID = fallback.id
+        } else if removingActive {
+            activeProfileID = profiles[0].id
+        }
     }
 
     var currentMonthExpenses: Double {
@@ -393,14 +480,17 @@ final class LedgerStore: ObservableObject {
     }
 
     func addBudget(name: String, limitAmount: Double, category: TxCategory?) {
-        guard limitAmount > 0 else { return }
+        guard limitAmount > 0, profiles.indices.contains(activeProfileIndex) else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalName = trimmed.isEmpty ? (category?.rawValue ?? "General Budget") : trimmed
-        budgets.append(BudgetGoal(name: finalName, limitAmount: limitAmount, category: category))
+        profiles[activeProfileIndex].budgets.append(
+            BudgetGoal(name: finalName, limitAmount: limitAmount, category: category)
+        )
     }
 
     func deleteBudgets(at offsets: IndexSet) {
-        budgets.remove(atOffsets: offsets)
+        guard profiles.indices.contains(activeProfileIndex) else { return }
+        profiles[activeProfileIndex].budgets.remove(atOffsets: offsets)
     }
 
     func categoryTotals(type: TxType = .expense) -> [(category: TxCategory, total: Double)] {
@@ -415,7 +505,7 @@ final class LedgerStore: ObservableObject {
     }
 
     func addTransaction(title: String, amount: Double, type: TxType, category: TxCategory, note: String) {
-        guard amount > 0 else { return }
+        guard amount > 0, profiles.indices.contains(activeProfileIndex) else { return }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let item = TransactionItem(
             title: cleanTitle.isEmpty ? category.rawValue : cleanTitle,
@@ -425,59 +515,69 @@ final class LedgerStore: ObservableObject {
             date: Date(),
             note: note.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        transactions.insert(item, at: 0)
+        profiles[activeProfileIndex].transactions.insert(item, at: 0)
     }
 
     func delete(at offsets: IndexSet) {
-        transactions.remove(atOffsets: offsets)
+        guard profiles.indices.contains(activeProfileIndex) else { return }
+        profiles[activeProfileIndex].transactions.remove(atOffsets: offsets)
     }
 
     func exportCSV() -> String {
-        var rows = ["Date_Time,Title,Type,Category,Amount_INR,Note"]
+        var rows = ["Profile,Date_Time,Title,Type,Category,Amount_INR,Note"]
         let formatter = ISO8601DateFormatter()
+        let safeProfile = activeProfileName.replacingOccurrences(of: "\"", with: "\"\"")
         for t in transactions {
             let escapedTitle = t.title.replacingOccurrences(of: "\"", with: "\"\"")
             let escapedNote = t.note.replacingOccurrences(of: "\"", with: "\"\"")
-            rows.append("\"\(formatter.string(from: t.date))\",\"\(escapedTitle)\",\"\(t.type.rawValue)\",\"\(t.category.rawValue)\",\(String(format: "%.2f", t.amount)),\"\(escapedNote)\"")
+            rows.append("\"\(safeProfile)\",\"\(formatter.string(from: t.date))\",\"\(escapedTitle)\",\"\(t.type.rawValue)\",\"\(t.category.rawValue)\",\(String(format: "%.2f", t.amount)),\"\(escapedNote)\"")
         }
         return rows.joined(separator: "\n")
     }
 
-    private func saveTransactions() {
-        if let data = try? JSONEncoder().encode(transactions) {
-            try? data.write(to: transactionsURL, options: .atomic)
+    private func saveProfiles() {
+        if let data = try? JSONEncoder().encode(profiles) {
+            try? data.write(to: profilesURL, options: .atomic)
         }
     }
 
-    private func loadTransactions() {
-        if let data = try? Data(contentsOf: transactionsURL),
-           let decoded = try? JSONDecoder().decode([TransactionItem].self, from: data) {
-            self.transactions = decoded
-        } else {
-            self.transactions = [
+    private static func loadProfilesFromDisk(url: URL) -> [RupaiyaProfile] {
+        if let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([RupaiyaProfile].self, from: data),
+           !decoded.isEmpty {
+            return decoded
+        }
+
+        let docs = url.deletingLastPathComponent()
+        let legacyTxURL = docs.appendingPathComponent("rupeeflow_transactions.json")
+        let legacyBudgetsURL = docs.appendingPathComponent("rupeeflow_budgets.json")
+
+        let legacyTx: [TransactionItem] = {
+            if let data = try? Data(contentsOf: legacyTxURL),
+               let decoded = try? JSONDecoder().decode([TransactionItem].self, from: data) {
+                return decoded
+            }
+            return [
                 TransactionItem(title: "Monthly Allowance", amount: 12000, type: .income, category: .salary, note: "Starter entry"),
                 TransactionItem(title: "Lunch & Chai", amount: 180, type: .expense, category: .food, note: "Sample expense")
             ]
-        }
-    }
+        }()
 
-    private func saveBudgets() {
-        if let data = try? JSONEncoder().encode(budgets) {
-            try? data.write(to: budgetsURL, options: .atomic)
-        }
-    }
-
-    private func loadBudgets() {
-        if let data = try? Data(contentsOf: budgetsURL),
-           let decoded = try? JSONDecoder().decode([BudgetGoal].self, from: data) {
-            self.budgets = decoded
-        } else {
-            self.budgets = [
+        let legacyBudgets: [BudgetGoal] = {
+            if let data = try? Data(contentsOf: legacyBudgetsURL),
+               let decoded = try? JSONDecoder().decode([BudgetGoal].self, from: data) {
+                return decoded
+            }
+            return [
                 BudgetGoal(name: "Monthly Spend", limitAmount: 10000, category: nil),
                 BudgetGoal(name: "Food & Mess", limitAmount: 4000, category: .food),
                 BudgetGoal(name: "Travel & Auto", limitAmount: 2000, category: .travel)
             ]
-        }
+        }()
+
+        return [
+            RupaiyaProfile(name: "Personal", transactions: legacyTx, budgets: legacyBudgets)
+        ]
     }
 }
 
@@ -491,18 +591,112 @@ func formatINR(_ value: Double) -> String {
     return formatter.string(from: NSNumber(value: value)) ?? "₹\(value)"
 }
 
+// MARK: - Profile Switcher & Manager Sheet
+
+struct ProfileManagerSheet: View {
+    @ObservedObject var store: LedgerStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var newProfileName = ""
+    @State private var renameDraft = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Add New Person / Profile") {
+                    TextField("Person or profile name (e.g., Papa, Mom, Roommate)", text: $newProfileName)
+                    Button("Create Profile") {
+                        store.addProfile(name: newProfileName)
+                        newProfileName = ""
+                    }
+                    .bold()
+                    .disabled(newProfileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                Section("Active Profile Name") {
+                    TextField("Rename active profile", text: $renameDraft)
+                    Button("Save Name") {
+                        store.renameActiveProfile(to: renameDraft)
+                    }
+                    .disabled(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                Section("All Profiles (Tap to Switch)") {
+                    ForEach(store.profiles) { profile in
+                        Button {
+                            store.selectProfile(id: profile.id)
+                            renameDraft = profile.name
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(profile.name)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text("\(profile.transactions.count) entries")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if profile.id == store.activeProfileID {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                }
+                            }
+                        }
+                    }
+                    .onDelete(perform: store.deleteProfile)
+                }
+            }
+            .navigationTitle("Profiles")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                renameDraft = store.activeProfileName
+            }
+            .onChange(of: store.activeProfileID) { _ in
+                renameDraft = store.activeProfileName
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Views
 
 struct LedgerHomeView: View {
     @ObservedObject var store: LedgerStore
     @State private var showingAddSheet = false
+    @State private var showingProfileSheet = false
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    HStack {
+                        Picker("Profile", selection: $store.activeProfileID) {
+                            ForEach(store.profiles) { profile in
+                                Text(profile.name).tag(profile.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        Spacer()
+
+                        Button {
+                            showingProfileSheet = true
+                        } label: {
+                            Label("Profiles", systemImage: "person.2.badge.plus")
+                                .font(.subheadline.bold())
+                        }
+                    }
+                }
+
+                Section {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Net Balance")
+                        Text("\(store.activeProfileName) — Net Balance")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Text(formatINR(store.netBalance))
@@ -550,7 +744,7 @@ struct LedgerHomeView: View {
 
                 Section("Recent Activity") {
                     if store.transactions.isEmpty {
-                        Text("No entries yet. Tap + to record an expense or income.")
+                        Text("No entries yet for \(store.activeProfileName). Tap + to add one.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(store.transactions) { item in
@@ -582,6 +776,14 @@ struct LedgerHomeView: View {
             }
             .navigationTitle("Rupaiya")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingProfileSheet = true
+                    } label: {
+                        Text(store.activeProfileName)
+                            .font(.subheadline.bold())
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingAddSheet = true
@@ -593,6 +795,9 @@ struct LedgerHomeView: View {
             }
             .sheet(isPresented: $showingAddSheet) {
                 AddTransactionSheet(store: store)
+            }
+            .sheet(isPresented: $showingProfileSheet) {
+                ProfileManagerSheet(store: store)
             }
         }
     }
@@ -611,6 +816,11 @@ struct AddTransactionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Profile") {
+                    Text("Adding to: \(store.activeProfileName)")
+                        .font(.subheadline.bold())
+                }
+
                 Section("Type") {
                     Picker("Type", selection: $type) {
                         ForEach(TxType.allCases, id: \.self) { t in
@@ -662,7 +872,7 @@ struct BreakdownView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Spending by Category") {
+                Section("Spending by Category (\(store.activeProfileName))") {
                     let items = store.categoryTotals(type: .expense)
                     let maxVal = max(items.first?.total ?? 1, 1)
 
@@ -703,6 +913,7 @@ struct BudgetSettingsView: View {
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
     @State private var generatedPDF: PDFDocumentTransfer?
+    @State private var showingProfileSheet = false
 
     private var activePeriodLabel: String {
         if selectedPeriod == .custom {
@@ -718,7 +929,18 @@ struct BudgetSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Add Named Budget (₹)") {
+                Section("Active Profile") {
+                    HStack {
+                        Text(store.activeProfileName)
+                            .font(.headline)
+                        Spacer()
+                        Button("Manage Profiles") {
+                            showingProfileSheet = true
+                        }
+                    }
+                }
+
+                Section("Add Named Budget (\(store.activeProfileName))") {
                     TextField("Budget name (e.g., Mess, Travel, Gaming)", text: $budgetName)
                     TextField("Limit amount in ₹", text: $budgetLimitInput)
                         .keyboardType(.decimalPad)
@@ -770,7 +992,7 @@ struct BudgetSettingsView: View {
                     }
                 }
 
-                Section("PDF Statement Period") {
+                Section("PDF Statement (\(store.activeProfileName))") {
                     Picker("Period", selection: $selectedPeriod) {
                         ForEach(ReportPeriod.allCases) { period in
                             Text(period.rawValue).tag(period)
@@ -793,6 +1015,7 @@ struct BudgetSettingsView: View {
                             customEnd: customEndDate
                         )
                         if let url = PDFExporter.generateStatement(
+                            profileName: store.activeProfileName,
                             transactions: store.transactions,
                             periodLabel: activePeriodLabel,
                             from: bounds.start,
@@ -807,7 +1030,7 @@ struct BudgetSettingsView: View {
                     if let pdfItem = generatedPDF {
                         ShareLink(
                             item: pdfItem,
-                            preview: SharePreview("Rupaiya_Statement.pdf", image: Image(systemName: "doc.richtext.fill"))
+                            preview: SharePreview("Rupaiya_\(store.activeProfileName)_Statement.pdf", image: Image(systemName: "doc.richtext.fill"))
                         ) {
                             Label("Share / Save PDF", systemImage: "square.and.arrow.up")
                                 .bold()
@@ -815,13 +1038,19 @@ struct BudgetSettingsView: View {
                     }
                 }
 
-                Section("Export CSV") {
+                Section("Export CSV (\(store.activeProfileName))") {
                     ShareLink(item: store.exportCSV()) {
                         Label("Export Transactions CSV", systemImage: "tablecells")
                     }
                 }
             }
             .navigationTitle("Budget & Export")
+            .onChange(of: store.activeProfileID) { _ in
+                generatedPDF = nil
+            }
+            .sheet(isPresented: $showingProfileSheet) {
+                ProfileManagerSheet(store: store)
+            }
         }
     }
 }
