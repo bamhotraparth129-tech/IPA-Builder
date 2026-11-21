@@ -1,4 +1,6 @@
 import SwiftUI
+import PDFKit
+import UIKit
 
 // MARK: - Models
 
@@ -31,6 +33,38 @@ enum TxCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ReportPeriod: String, CaseIterable, Identifiable {
+    case thisMonth = "This Month"
+    case last7Days = "Last 7 Days"
+    case last30Days = "Last 30 Days"
+    case allTime = "All Time"
+    case custom = "Custom Range"
+
+    var id: String { rawValue }
+
+    func dateBounds(now: Date = Date(), customStart: Date, customEnd: Date, calendar: Calendar = .current) -> (start: Date?, end: Date?) {
+        switch self {
+        case .thisMonth:
+            let comps = calendar.dateComponents([.year, .month], from: now)
+            let start = calendar.date(from: comps)
+            return (start, now)
+        case .last7Days:
+            let start = calendar.date(byAdding: .day, value: -7, to: now)
+            return (start, now)
+        case .last30Days:
+            let start = calendar.date(byAdding: .day, value: -30, to: now)
+            return (start, now)
+        case .allTime:
+            return (nil, nil)
+        case .custom:
+            let start = calendar.startOfDay(for: min(customStart, customEnd))
+            let endDay = max(customStart, customEnd)
+            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDay) ?? endDay
+            return (start, end)
+        }
+    }
+}
+
 struct TransactionItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -56,6 +90,230 @@ struct TransactionItem: Identifiable, Codable, Equatable {
         self.category = category
         self.date = date
         self.note = note
+    }
+}
+
+struct PDFDocumentTransfer: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .pdf) { item in
+            SentTransferredFile(item.url, allowCopying: true)
+        }
+    }
+}
+
+// MARK: - PDF Statement Generator
+
+enum PDFExporter {
+    static func generateStatement(
+        transactions: [TransactionItem],
+        periodLabel: String,
+        from startDate: Date?,
+        to endDate: Date?
+    ) -> URL? {
+        let filtered = transactions.filter { item in
+            if let s = startDate, item.date < s { return false }
+            if let e = endDate, item.date > e { return false }
+            return true
+        }.sorted { $0.date > $1.date }
+
+        let totalIncome = filtered.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
+        let totalExpense = filtered.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+        let net = totalIncome - totalExpense
+
+        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4 points
+        let margin: CGFloat = 36
+        let contentWidth = pageRect.width - (margin * 2)
+
+        let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+        let dateTimeFormatter = DateFormatter()
+        dateTimeFormatter.dateStyle = .medium
+        dateTimeFormatter.timeStyle = .short
+
+        let generatedStamp = dateTimeFormatter.string(from: Date())
+
+        let data = renderer.pdfData { context in
+            var currentY: CGFloat = 0
+
+            func startNewPage() {
+                context.beginPage()
+                currentY = margin
+
+                // Top banner
+                let headerRect = CGRect(x: margin, y: currentY, width: contentWidth, height: 54)
+                UIColor(red: 0.06, green: 0.24, blue: 0.19, alpha: 1.0).setFill()
+                UIBezierPath(roundedRect: headerRect, cornerRadius: 8).fill()
+
+                let titleAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 20),
+                    .foregroundColor: UIColor.white
+                ]
+                NSString(string: "Rupaiya — Statement").draw(
+                    at: CGPoint(x: headerRect.minX + 14, y: headerRect.minY + 10),
+                    withAttributes: titleAttrs
+                )
+
+                let subAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 11),
+                    .foregroundColor: UIColor(white: 0.92, alpha: 1.0)
+                ]
+                NSString(string: "Period: \(periodLabel)  •  Generated: \(generatedStamp)").draw(
+                    at: CGPoint(x: headerRect.minX + 14, y: headerRect.minY + 33),
+                    withAttributes: subAttrs
+                )
+
+                currentY = headerRect.maxY + 16
+            }
+
+            startNewPage()
+
+            // Summary cards row
+            let cardGap: CGFloat = 10
+            let cardWidth = (contentWidth - (cardGap * 2)) / 3
+            let cardHeight: CGFloat = 56
+
+            let summaries: [(String, Double, UIColor)] = [
+                ("Total Income", totalIncome, UIColor.systemGreen),
+                ("Total Expense", totalExpense, UIColor.systemRed),
+                ("Net Balance", net, net >= 0 ? UIColor.systemTeal : UIColor.systemOrange)
+            ]
+
+            for (idx, summary) in summaries.enumerated() {
+                let x = margin + CGFloat(idx) * (cardWidth + cardGap)
+                let rect = CGRect(x: x, y: currentY, width: cardWidth, height: cardHeight)
+                UIColor(white: 0.96, alpha: 1.0).setFill()
+                UIBezierPath(roundedRect: rect, cornerRadius: 8).fill()
+
+                let labelAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 10, weight: .medium),
+                    .foregroundColor: UIColor.darkGray
+                ]
+                NSString(string: summary.0).draw(
+                    at: CGPoint(x: rect.minX + 10, y: rect.minY + 9),
+                    withAttributes: labelAttrs
+                )
+
+                let valAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 14),
+                    .foregroundColor: summary.2
+                ]
+                NSString(string: formatINR(summary.1)).draw(
+                    at: CGPoint(x: rect.minX + 10, y: rect.minY + 28),
+                    withAttributes: valAttrs
+                )
+            }
+
+            currentY += cardHeight + 20
+
+            // Section heading
+            let secAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 14),
+                .foregroundColor: UIColor.black
+            ]
+            NSString(string: "Transactions (\(filtered.count))").draw(
+                at: CGPoint(x: margin, y: currentY),
+                withAttributes: secAttrs
+            )
+            currentY += 22
+
+            // Column headers
+            let colHeaderAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 10),
+                .foregroundColor: UIColor.darkGray
+            ]
+            NSString(string: "Date & Time").draw(at: CGPoint(x: margin, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Type").draw(at: CGPoint(x: margin + 145, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Title / Category").draw(at: CGPoint(x: margin + 210, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Amount").draw(at: CGPoint(x: pageRect.width - margin - 85, y: currentY), withAttributes: colHeaderAttrs)
+
+            currentY += 16
+            let linePath = UIBezierPath()
+            linePath.move(to: CGPoint(x: margin, y: currentY))
+            linePath.addLine(to: CGPoint(x: pageRect.width - margin, y: currentY))
+            UIColor.lightGray.setStroke()
+            linePath.lineWidth = 1
+            linePath.stroke()
+            currentY += 8
+
+            if filtered.isEmpty {
+                let emptyAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.italicSystemFont(ofSize: 12),
+                    .foregroundColor: UIColor.gray
+                ]
+                NSString(string: "No transactions recorded in the selected period.").draw(
+                    at: CGPoint(x: margin, y: currentY + 8),
+                    withAttributes: emptyAttrs
+                )
+                return
+            }
+
+            let rowHeight: CGFloat = 34
+            for (index, item) in filtered.enumerated() {
+                if currentY + rowHeight > pageRect.height - margin {
+                    startNewPage()
+                }
+
+                if index % 2 == 1 {
+                    let stripeRect = CGRect(x: margin, y: currentY - 2, width: contentWidth, height: rowHeight)
+                    UIColor(white: 0.985, alpha: 1.0).setFill()
+                    UIBezierPath(rect: stripeRect).fill()
+                }
+
+                let whenStr = dateTimeFormatter.string(from: item.date)
+                let typeStr = item.type.rawValue
+                let detailStr = "\(item.title) (\(item.category.rawValue))"
+                let sign = item.type == .expense ? "-" : "+"
+                let amountStr = "\(sign)\(formatINR(item.amount))"
+
+                let dateAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 10),
+                    .foregroundColor: UIColor.darkGray
+                ]
+                NSString(string: whenStr).draw(
+                    in: CGRect(x: margin, y: currentY + 4, width: 140, height: rowHeight),
+                    withAttributes: dateAttrs
+                )
+
+                let typeColor = item.type == .expense ? UIColor.systemRed : UIColor.systemGreen
+                let typeAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 10),
+                    .foregroundColor: typeColor
+                ]
+                NSString(string: typeStr).draw(
+                    in: CGRect(x: margin + 145, y: currentY + 4, width: 62, height: rowHeight),
+                    withAttributes: typeAttrs
+                )
+
+                let titleAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 10.5, weight: .medium),
+                    .foregroundColor: UIColor.black
+                ]
+                NSString(string: detailStr).draw(
+                    in: CGRect(x: margin + 210, y: currentY + 4, width: contentWidth - 295, height: rowHeight),
+                    withAttributes: titleAttrs
+                )
+
+                let amtAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 10.5),
+                    .foregroundColor: typeColor
+                ]
+                NSString(string: amountStr).draw(
+                    in: CGRect(x: pageRect.width - margin - 90, y: currentY + 4, width: 90, height: rowHeight),
+                    withAttributes: amtAttrs
+                )
+
+                currentY += rowHeight
+            }
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("Rupaiya_Statement.pdf")
+        do {
+            try data.write(to: tempURL, options: .atomic)
+            return tempURL
+        } catch {
+            return nil
+        }
     }
 }
 
@@ -127,7 +385,7 @@ final class LedgerStore: ObservableObject {
     }
 
     func exportCSV() -> String {
-        var rows = ["Date,Title,Type,Category,Amount_INR,Note"]
+        var rows = ["Date_Time,Title,Type,Category,Amount_INR,Note"]
         let formatter = ISO8601DateFormatter()
         for t in transactions {
             let escapedTitle = t.title.replacingOccurrences(of: "\"", with: "\"\"")
@@ -362,6 +620,22 @@ struct BudgetSettingsView: View {
     @ObservedObject var store: LedgerStore
     @State private var budgetInput: String = ""
 
+    @State private var selectedPeriod: ReportPeriod = .thisMonth
+    @State private var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    @State private var customEndDate: Date = Date()
+    @State private var generatedPDF: PDFDocumentTransfer?
+
+    private var activePeriodLabel: String {
+        if selectedPeriod == .custom {
+            let fmt = DateFormatter()
+            fmt.dateStyle = .medium
+            let a = min(customStartDate, customEndDate)
+            let b = max(customStartDate, customEndDate)
+            return "\(fmt.string(from: a)) – \(fmt.string(from: b))"
+        }
+        return selectedPeriod.rawValue
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -376,9 +650,51 @@ struct BudgetSettingsView: View {
                     }
                 }
 
-                Section("Export Data") {
+                Section("PDF Statement Period") {
+                    Picker("Period", selection: $selectedPeriod) {
+                        ForEach(ReportPeriod.allCases) { period in
+                            Text(period.rawValue).tag(period)
+                        }
+                    }
+                    .onChange(of: selectedPeriod) { _ in
+                        generatedPDF = nil
+                    }
+
+                    if selectedPeriod == .custom {
+                        DatePicker("From Date", selection: $customStartDate, displayedComponents: .date)
+                            .onChange(of: customStartDate) { _ in generatedPDF = nil }
+                        DatePicker("To Date", selection: $customEndDate, displayedComponents: .date)
+                            .onChange(of: customEndDate) { _ in generatedPDF = nil }
+                    }
+
+                    Button {
+                        let bounds = selectedPeriod.dateBounds(
+                            customStart: customStartDate,
+                            customEnd: customEndDate
+                        )
+                        if let url = PDFExporter.generateStatement(
+                            transactions: store.transactions,
+                            periodLabel: activePeriodLabel,
+                            from: bounds.start,
+                            to: bounds.end
+                        ) {
+                            generatedPDF = PDFDocumentTransfer(url: url)
+                        }
+                    } label: {
+                        Label("Generate PDF Statement", systemImage: "doc.richtext.fill")
+                    }
+
+                    if let pdfItem = generatedPDF {
+                        ShareLink(item: pdfItem, preview: SharePreview("Rupaiya_Statement.pdf", image: Image(systemName: "doc.richtext.fill"))) {
+                            Label("Share / Save PDF", systemImage: "square.and.arrow.up")
+                                .bold()
+                        }
+                    }
+                }
+
+                Section("Export CSV") {
                     ShareLink(item: store.exportCSV()) {
-                        Label("Export Transactions CSV", systemImage: "square.and.arrow.up")
+                        Label("Export Transactions CSV", systemImage: "tablecells")
                     }
                 }
             }
