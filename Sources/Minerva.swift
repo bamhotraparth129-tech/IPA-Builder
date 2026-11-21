@@ -287,11 +287,9 @@ final class PrivacyLockManager: ObservableObject {
 
     func togglePrivacy() {
         if !isPrivacyHidden {
-            // Hiding balances requires no prompt
             isPrivacyHidden = true
             authErrorMessage = nil
         } else {
-            // Revealing balances requires Face ID / Touch ID / Device Passcode
             authenticateToReveal()
         }
     }
@@ -317,7 +315,6 @@ final class PrivacyLockManager: ObservableObject {
                 }
             }
         } else {
-            // If device has no passcode or biometrics configured at all
             DispatchQueue.main.async {
                 self.isPrivacyHidden = false
                 self.authErrorMessage = nil
@@ -373,15 +370,30 @@ enum PDFExporter {
         let net = totalIncome - totalExpense
 
         let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4
-        let margin: CGFloat = 36
+        let margin: CGFloat = 32
         let contentWidth = pageRect.width - (margin * 2)
+
+        // Column X offsets and widths across contentWidth (531.2pt)
+        let dateX: CGFloat = margin
+        let dateW: CGFloat = 104
+        let modeX: CGFloat = dateX + dateW + 4
+        let modeW: CGFloat = 62
+        let entryX: CGFloat = modeX + modeW + 4
+        let entryW: CGFloat = 148
+        let notesX: CGFloat = entryX + entryW + 6
+        let notesW: CGFloat = 123
+        let amtX: CGFloat = notesX + notesW + 4
+        let amtW: CGFloat = (margin + contentWidth) - amtX
 
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
         let dateTimeFormatter = DateFormatter()
-        dateTimeFormatter.dateStyle = .medium
+        dateTimeFormatter.dateStyle = .short
         dateTimeFormatter.timeStyle = .short
 
-        let generatedStamp = dateTimeFormatter.string(from: Date())
+        let stampFormatter = DateFormatter()
+        stampFormatter.dateStyle = .medium
+        stampFormatter.timeStyle = .short
+        let generatedStamp = stampFormatter.string(from: Date())
 
         let data = renderer.pdfData { context in
             var currentY: CGFloat = 0
@@ -471,13 +483,27 @@ enum PDFExporter {
             currentY += 22
 
             let colHeaderAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.boldSystemFont(ofSize: 10),
+                .font: UIFont.boldSystemFont(ofSize: 9.5),
                 .foregroundColor: UIColor.darkGray
             ]
-            NSString(string: "Date & Time").draw(at: CGPoint(x: margin, y: currentY), withAttributes: colHeaderAttrs)
-            NSString(string: "Type / Mode").draw(at: CGPoint(x: margin + 135, y: currentY), withAttributes: colHeaderAttrs)
-            NSString(string: "Title / Category").draw(at: CGPoint(x: margin + 215, y: currentY), withAttributes: colHeaderAttrs)
-            NSString(string: "Amount").draw(at: CGPoint(x: pageRect.width - margin - 85, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Date").draw(at: CGPoint(x: dateX, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Mode").draw(at: CGPoint(x: modeX, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Entry").draw(at: CGPoint(x: entryX, y: currentY), withAttributes: colHeaderAttrs)
+            NSString(string: "Notes").draw(at: CGPoint(x: notesX, y: currentY), withAttributes: colHeaderAttrs)
+
+            let amtHeaderAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 9.5),
+                .foregroundColor: UIColor.darkGray,
+                .paragraphStyle: {
+                    let p = NSMutableParagraphStyle()
+                    p.alignment = .right
+                    return p
+                }()
+            ]
+            NSString(string: "Amount").draw(
+                in: CGRect(x: amtX, y: currentY, width: amtW, height: 14),
+                withAttributes: amtHeaderAttrs
+            )
 
             currentY += 16
             let linePath = UIBezierPath()
@@ -498,9 +524,25 @@ enum PDFExporter {
                     withAttributes: emptyAttrs
                 )
             } else {
+                let rightAlignStyle = NSMutableParagraphStyle()
+                rightAlignStyle.alignment = .right
+
                 for (index, item) in filtered.enumerated() {
                     let trimmedNote = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let rowHeight: CGFloat = trimmedNote.isEmpty ? 32 : 44
+                    let noteCellText = trimmedNote.isEmpty ? "—" : trimmedNote
+                    let entryCellText = "\(item.title) (\(item.category.rawValue))"
+
+                    let noteAttrs: [NSAttributedString.Key: Any] = [
+                        .font: UIFont.systemFont(ofSize: 9),
+                        .foregroundColor: trimmedNote.isEmpty ? UIColor.lightGray : UIColor.darkGray
+                    ]
+                    let noteBounding = NSString(string: noteCellText).boundingRect(
+                        with: CGSize(width: notesW, height: 60),
+                        options: [.usesLineFragmentOrigin, .usesFontLeading],
+                        attributes: noteAttrs,
+                        context: nil
+                    )
+                    let rowHeight: CGFloat = max(30, ceil(noteBounding.height) + 12)
                     ensureSpace(rowHeight + 4)
 
                     if index % 2 == 1 {
@@ -510,112 +552,53 @@ enum PDFExporter {
                     }
 
                     let whenStr = dateTimeFormatter.string(from: item.date)
-                    let typeModeStr = "\(item.type.rawValue) • \(item.paymentMode.rawValue)"
-                    let detailStr = trimmedNote.isEmpty
-                        ? "\(item.title) (\(item.category.rawValue))"
-                        : "\(item.title) (\(item.category.rawValue)) — Note: \(trimmedNote)"
                     let sign = item.type == .expense ? "-" : "+"
                     let amountStr = "\(sign)\(formatINR(item.amount))"
+                    let typeColor = item.type == .expense ? UIColor.systemRed : UIColor.systemGreen
 
                     let dateAttrs: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.systemFont(ofSize: 9.5),
+                        .font: UIFont.systemFont(ofSize: 9),
                         .foregroundColor: UIColor.darkGray
                     ]
                     NSString(string: whenStr).draw(
-                        in: CGRect(x: margin, y: currentY + 4, width: 130, height: rowHeight - 4),
+                        in: CGRect(x: dateX, y: currentY + 4, width: dateW, height: rowHeight - 4),
                         withAttributes: dateAttrs
                     )
 
-                    let typeColor = item.type == .expense ? UIColor.systemRed : UIColor.systemGreen
-                    let typeAttrs: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.boldSystemFont(ofSize: 9.5),
-                        .foregroundColor: typeColor
+                    let modeAttrs: [NSAttributedString.Key: Any] = [
+                        .font: UIFont.systemFont(ofSize: 9, weight: .medium),
+                        .foregroundColor: UIColor.darkGray
                     ]
-                    NSString(string: typeModeStr).draw(
-                        in: CGRect(x: margin + 135, y: currentY + 4, width: 76, height: rowHeight - 4),
-                        withAttributes: typeAttrs
+                    NSString(string: item.paymentMode.rawValue).draw(
+                        in: CGRect(x: modeX, y: currentY + 4, width: modeW, height: rowHeight - 4),
+                        withAttributes: modeAttrs
                     )
 
                     let titleAttrs: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.systemFont(ofSize: 10, weight: .medium),
+                        .font: UIFont.systemFont(ofSize: 9.5, weight: .medium),
                         .foregroundColor: UIColor.black
                     ]
-                    NSString(string: detailStr).draw(
-                        in: CGRect(x: margin + 215, y: currentY + 4, width: contentWidth - 300, height: rowHeight - 4),
+                    NSString(string: entryCellText).draw(
+                        in: CGRect(x: entryX, y: currentY + 4, width: entryW, height: rowHeight - 4),
                         withAttributes: titleAttrs
                     )
 
+                    NSString(string: noteCellText).draw(
+                        in: CGRect(x: notesX, y: currentY + 4, width: notesW, height: rowHeight - 4),
+                        withAttributes: noteAttrs
+                    )
+
                     let amtAttrs: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.boldSystemFont(ofSize: 10.5),
-                        .foregroundColor: typeColor
+                        .font: UIFont.boldSystemFont(ofSize: 9.5),
+                        .foregroundColor: typeColor,
+                        .paragraphStyle: rightAlignStyle
                     ]
                     NSString(string: amountStr).draw(
-                        in: CGRect(x: pageRect.width - margin - 90, y: currentY + 4, width: 90, height: rowHeight - 4),
+                        in: CGRect(x: amtX, y: currentY + 4, width: amtW, height: rowHeight - 4),
                         withAttributes: amtAttrs
                     )
 
                     currentY += rowHeight
-                }
-            }
-
-            // Dedicated Notes section
-            let entriesWithNotes = filtered.filter { !$0.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            currentY += 18
-            ensureSpace(48)
-
-            NSString(string: "Notes (\(entriesWithNotes.count))").draw(
-                at: CGPoint(x: margin, y: currentY),
-                withAttributes: secAttrs
-            )
-            currentY += 20
-
-            let noteLine = UIBezierPath()
-            noteLine.move(to: CGPoint(x: margin, y: currentY))
-            noteLine.addLine(to: CGPoint(x: pageRect.width - margin, y: currentY))
-            UIColor.lightGray.setStroke()
-            noteLine.lineWidth = 1
-            noteLine.stroke()
-            currentY += 10
-
-            if entriesWithNotes.isEmpty {
-                let emptyNoteAttrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.italicSystemFont(ofSize: 11),
-                    .foregroundColor: UIColor.gray
-                ]
-                NSString(string: "No notes recorded for entries in this period.").draw(
-                    at: CGPoint(x: margin, y: currentY + 4),
-                    withAttributes: emptyNoteAttrs
-                )
-            } else {
-                for item in entriesWithNotes {
-                    let cleanNote = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let sign = item.type == .expense ? "-" : "+"
-                    let meta = "\(item.title) • \(item.type.rawValue) (\(sign)\(formatINR(item.amount))) • \(item.paymentMode.rawValue) • \(dateTimeFormatter.string(from: item.date))"
-                    let noteText = "Note: \(cleanNote)"
-
-                    let metaRect = CGRect(x: margin, y: currentY, width: contentWidth, height: 16)
-                    let noteRect = CGRect(x: margin + 10, y: currentY + 16, width: contentWidth - 10, height: 30)
-                    let blockHeight: CGFloat = 52
-
-                    ensureSpace(blockHeight)
-
-                    let cardRect = CGRect(x: margin, y: currentY - 2, width: contentWidth, height: blockHeight - 4)
-                    UIColor(white: 0.965, alpha: 1.0).setFill()
-                    UIBezierPath(roundedRect: cardRect, cornerRadius: 6).fill()
-
-                    let metaAttrs: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.boldSystemFont(ofSize: 10),
-                        .foregroundColor: UIColor.darkGray
-                    ]
-                    NSString(string: meta).draw(in: metaRect, withAttributes: metaAttrs)
-
-                    let bodyAttrs: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.systemFont(ofSize: 10.5),
-                        .foregroundColor: UIColor.black
-                    ]
-                    NSString(string: noteText).draw(in: noteRect, withAttributes: bodyAttrs)
-
-                    currentY += blockHeight + 4
                 }
             }
         }
@@ -1404,7 +1387,7 @@ struct LedgerHomeView: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     if !trimmedNote.isEmpty {
-                                        Label(trimmedNote, systemImage: "note.text")
+                                        Text(trimmedNote)
                                             .font(.caption)
                                             .foregroundStyle(.primary)
                                             .padding(.top, 1)
