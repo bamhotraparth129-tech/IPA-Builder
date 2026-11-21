@@ -7,21 +7,77 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-ipa:
     runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Generate AppIcon asset
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Prepare AppIcon asset catalog
         run: |
-          mkdir -p Sources/Assets.xcassets/AppIcon.appiconset
-          cat << 'EOF' > Sources/Assets.xcassets/AppIcon.appiconset/Contents.json
+          set -euo pipefail
+          ICON_DIR="Sources/Assets.xcassets/AppIcon.appiconset"
+          mkdir -p "$ICON_DIR"
+
+          if [ -f "Assets/AppIcon.png" ]; then
+            cp "Assets/AppIcon.png" "$ICON_DIR/Icon-1024.png"
+          else
+            swift -e '
+            import Foundation
+            import CoreGraphics
+            import CoreText
+
+            let width = 1024
+            let height = 1024
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+            guard let ctx = CGContext(
+              data: nil,
+              width: width,
+              height: height,
+              bitsPerComponent: 8,
+              bytesPerRow: width * 4,
+              space: colorSpace,
+              bitmapInfo: bitmapInfo
+            ) else { exit(1) }
+
+            let rect = CGRect(x: 0, y: 0, width: width, height: height)
+            let bgColor = CGColor(red: 0.06, green: 0.24, blue: 0.19, alpha: 1.0)
+            ctx.setFillColor(bgColor)
+            ctx.fill(rect)
+
+            let text = "₹" as CFString
+            let font = CTFontCreateWithName("Helvetica Neue Bold" as CFString, 540, nil)
+            let attributes: [CFString: Any] = [
+              kCTFontAttributeName: font,
+              kCTForegroundColorAttributeName: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+            ]
+            let attrString = CFAttributedStringCreate(nil, text, attributes as CFDictionary)!
+            let line = CTLineCreateWithAttributedString(attrString)
+            let bounds = CTLineGetBoundsWithOptions(line, [])
+            let x = (CGFloat(width) - bounds.width) / 2.0 - bounds.origin.x
+            let y = (CGFloat(height) - bounds.height) / 2.0 - bounds.origin.y
+
+            ctx.textPosition = CGPoint(x: x, y: y)
+            CTLineDraw(line, ctx)
+
+            guard let cgImage = ctx.makeImage() else { exit(1) }
+            let url = URL(fileURLWithPath: "Sources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
+            guard let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { exit(1) }
+            CGImageDestinationAddImage(dest, cgImage, nil)
+            if !CGImageDestinationFinalize(dest) { exit(1) }
+            '
+          fi
+
+          cat > "$ICON_DIR/Contents.json" <<'EOF'
           {
             "images": [
               {
-                "filename": "icon_1024.png",
+                "filename": "Icon-1024.png",
                 "idiom": "universal",
                 "platform": "ios",
                 "size": "1024x1024"
@@ -33,103 +89,38 @@ jobs:
             }
           }
           EOF
-          cat << 'EOF' > Sources/Assets.xcassets/Contents.json
-          {
-            "info": {
-              "author": "xcode",
-              "version": 1
-            }
-          }
-          EOF
-          swift - << 'SWIFTEOF'
-          import Foundation
-          import CoreGraphics
-          import CoreText
-          import ImageIO
-          import UniformTypeIdentifiers
 
-          let width = 1024
-          let height = 1024
-          let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-          guard let ctx = CGContext(
-              data: nil,
-              width: width,
-              height: height,
-              bitsPerComponent: 8,
-              bytesPerRow: 0,
-              space: colorSpace,
-              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-          ) else {
-              fatalError("Failed to create CGContext")
-          }
-
-          ctx.setFillColor(CGColor(red: 0.06, green: 0.24, blue: 0.19, alpha: 1.0))
-          ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-
-          let badgeRect = CGRect(x: 112, y: 112, width: 800, height: 800)
-          let badgePath = CGPath(roundedRect: badgeRect, cornerWidth: 180, cornerHeight: 180, transform: nil)
-          ctx.setFillColor(CGColor(red: 0.11, green: 0.48, blue: 0.34, alpha: 1.0))
-          ctx.addPath(badgePath)
-          ctx.fillPath()
-
-          let symbol = "₹" as CFString
-          let font = CTFontCreateWithName("Helvetica-Bold" as CFString, 440, nil)
-          let attributes: [CFString: Any] = [
-              kCTFontAttributeName: font,
-              kCTForegroundColorAttributeName: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
-          ]
-          let attrString = CFAttributedStringCreate(nil, symbol, attributes as CFDictionary)!
-          let line = CTLineCreateWithAttributedString(attrString)
-          let bounds = CTLineGetBoundsWithOptions(line, .useOpticalBounds)
-
-          let textX = (CGFloat(width) - bounds.width) / 2.0 - bounds.origin.x
-          let textY = (CGFloat(height) - bounds.height) / 2.0 - bounds.origin.y - 12
-
-          ctx.textPosition = CGPoint(x: textX, y: textY)
-          CTLineDraw(line, ctx)
-
-          guard let cgImage = ctx.makeImage() else {
-              fatalError("Failed to create CGImage")
-          }
-
-          let outputURL = URL(fileURLWithPath: "Sources/Assets.xcassets/AppIcon.appiconset/icon_1024.png")
-          guard let dest = CGImageDestinationCreateWithURL(outputURL as CFURL, UTType.png.identifier as CFString, 1, nil) else {
-              fatalError("Failed to create image destination")
-          }
-          CGImageDestinationAddImage(dest, cgImage, nil)
-          if !CGImageDestinationFinalize(dest) {
-              fatalError("Failed to write icon_1024.png")
-          }
-          SWIFTEOF
-
-      - name: Install XcodeGen and generate project
-        run: |
-          brew install xcodegen
-          xcodegen generate
+      - name: Generate Xcode project with XcodeGen
+        run: xcodegen generate --spec project.yml
 
       - name: Build unsigned iOS app
         run: |
+          set -euo pipefail
           xcodebuild \
             -project Rupaiya.xcodeproj \
             -scheme Rupaiya \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
+            -arch arm64 \
+            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            VALIDATE_PRODUCT=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Package Rupaiya.ipa
         run: |
+          set -euo pipefail
+          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos -name "Rupaiya.app" -print -quit)"
+          test -n "$APP_PATH"
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/Rupaiya.app Payload/
-          zip -r Rupaiya.ipa Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry Rupaiya.ipa Payload
 
       - name: Upload Rupaiya.ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Rupaiya-ipa
+          name: Rupaiya-IPA
           path: Rupaiya.ipa
+          if-no-files-found: error
