@@ -1286,6 +1286,7 @@ struct LedgerHomeView: View {
                             Label("Transfer", systemImage: "arrow.left.arrow.right")
                                 .font(.subheadline.bold())
                         }
+                        .buttonStyle(.borderless)
 
                         Button {
                             showingProfileSheet = true
@@ -1293,6 +1294,7 @@ struct LedgerHomeView: View {
                             Label("Profiles", systemImage: "person.2.badge.plus")
                                 .font(.subheadline.bold())
                         }
+                        .buttonStyle(.borderless)
                     }
                 }
 
