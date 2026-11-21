@@ -41,39 +41,67 @@ jobs:
             }
           }
           EOF
-          python3 - << 'PYEOF'
-          from AppKit import NSBitmapImageRep, NSGraphicsContext, NSColor, NSBezierPath, NSRect, NSFont, NSString, NSFontAttributeName, NSForegroundColorAttributeName
+          swift - << 'SWIFTEOF'
+          import Foundation
+          import CoreGraphics
+          import CoreText
+          import ImageIO
+          import UniformTypeIdentifiers
 
-          size = 1024
-          rep = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
-              None, size, size, 8, 4, True, False, "NSCalibratedRGBColorSpace", 0, 0
-          )
-          ctx = NSGraphicsContext.graphicsContextWithBitmapImageRep_(rep)
-          NSGraphicsContext.saveGraphicsState()
-          NSGraphicsContext.setCurrentContext_(ctx)
+          let width = 1024
+          let height = 1024
+          let colorSpace = CGColorSpaceCreateDeviceRGB()
 
-          NSColor.colorWithCalibratedRed_green_blue_alpha_(0.06, 0.24, 0.19, 1.0).setFill()
-          NSBezierPath.bezierPathWithRect_(NSRect((0, 0), (size, size))).fill()
-
-          NSColor.colorWithCalibratedRed_green_blue_alpha_(0.11, 0.48, 0.34, 1.0).setFill()
-          badge = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(NSRect((112, 112), (800, 800)), 180, 180)
-          badge.fill()
-
-          text = NSString.stringWithString_("₹")
-          font = NSFont.boldSystemFontOfSize_(440)
-          attrs = {
-              NSFontAttributeName: font,
-              NSForegroundColorAttributeName: NSColor.whiteColor()
+          guard let ctx = CGContext(
+              data: nil,
+              width: width,
+              height: height,
+              bitsPerComponent: 8,
+              bytesPerRow: 0,
+              space: colorSpace,
+              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+          ) else {
+              fatalError("Failed to create CGContext")
           }
-          text_size = text.sizeWithAttributes_(attrs)
-          x = (size - text_size.width) / 2.0
-          y = (size - text_size.height) / 2.0 - 10
-          text.drawAtPoint_withAttributes_((x, y), attrs)
 
-          NSGraphicsContext.restoreGraphicsState()
-          png_data = rep.representationUsingType_properties_(4, None)
-          png_data.writeToFile_atomically_("Sources/Assets.xcassets/AppIcon.appiconset/icon_1024.png", True)
-          PYEOF
+          ctx.setFillColor(CGColor(red: 0.06, green: 0.24, blue: 0.19, alpha: 1.0))
+          ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+          let badgeRect = CGRect(x: 112, y: 112, width: 800, height: 800)
+          let badgePath = CGPath(roundedRect: badgeRect, cornerWidth: 180, cornerHeight: 180, transform: nil)
+          ctx.setFillColor(CGColor(red: 0.11, green: 0.48, blue: 0.34, alpha: 1.0))
+          ctx.addPath(badgePath)
+          ctx.fillPath()
+
+          let symbol = "₹" as CFString
+          let font = CTFontCreateWithName("Helvetica-Bold" as CFString, 440, nil)
+          let attributes: [CFString: Any] = [
+              kCTFontAttributeName: font,
+              kCTForegroundColorAttributeName: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+          ]
+          let attrString = CFAttributedStringCreate(nil, symbol, attributes as CFDictionary)!
+          let line = CTLineCreateWithAttributedString(attrString)
+          let bounds = CTLineGetBoundsWithOptions(line, .useOpticalBounds)
+
+          let textX = (CGFloat(width) - bounds.width) / 2.0 - bounds.origin.x
+          let textY = (CGFloat(height) - bounds.height) / 2.0 - bounds.origin.y - 12
+
+          ctx.textPosition = CGPoint(x: textX, y: textY)
+          CTLineDraw(line, ctx)
+
+          guard let cgImage = ctx.makeImage() else {
+              fatalError("Failed to create CGImage")
+          }
+
+          let outputURL = URL(fileURLWithPath: "Sources/Assets.xcassets/AppIcon.appiconset/icon_1024.png")
+          guard let dest = CGImageDestinationCreateWithURL(outputURL as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+              fatalError("Failed to create image destination")
+          }
+          CGImageDestinationAddImage(dest, cgImage, nil)
+          if !CGImageDestinationFinalize(dest) {
+              fatalError("Failed to write icon_1024.png")
+          }
+          SWIFTEOF
 
       - name: Install XcodeGen and generate project
         run: |
