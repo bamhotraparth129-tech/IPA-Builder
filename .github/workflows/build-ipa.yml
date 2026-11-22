@@ -1,4 +1,4 @@
-name: Build Rupaiya IPA
+name: Build Voxel_Craft IPA
 
 on:
   push:
@@ -97,8 +97,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
-            -project Rupaiya.xcodeproj \
-            -scheme Rupaiya \
+            -project Voxel_Craft.xcodeproj \
+            -scheme Voxel_Craft \
             -configuration Release \
             -sdk iphoneos \
             -arch arm64 \
@@ -109,18 +109,18 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Package Rupaiya.ipa
+      - name: Package Voxel_Craft.ipa
         run: |
           set -euo pipefail
-          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos -name "Rupaiya.app" -print -quit)"
+          APP_PATH="$(find build/DerivedData/Build/Products/Release-iphoneos -name "Voxel_Craft.app" -print -quit)"
           test -n "$APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -qry Rupaiya.ipa Payload
+          zip -qry Voxel_Craft.ipa Payload
 
-      - name: Upload Rupaiya.ipa artifact
+      - name: Upload Voxel_Craft.ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Rupaiya-IPA
-          path: Rupaiya.ipa
+          name: Voxel_Craft-IPA
+          path: Voxel_Craft.ipa
           if-no-files-found: error
