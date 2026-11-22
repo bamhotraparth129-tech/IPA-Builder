@@ -678,7 +678,7 @@ struct VoxelGameView: View {
                     HStack(spacing: 6) {
                         ForEach(BlockCategory.allCases) { category in
                             CategoryFilterButton(
-                                title: category.rawValue,
+                                category: category,
                                 isSelected: world.selectedCategory == category
                             ) {
                                 world.selectedCategory = category
@@ -748,7 +748,7 @@ struct VoxelGameView: View {
         .sheet(isPresented: $world.showBrewingSheet) {
             BrewingSheetView(world: world)
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             switch phase {
             case .active:
                 if !isShowingMainMenu { world.resumeGame() }
@@ -868,14 +868,15 @@ struct MoveHoldButton: View {
 }
 
 
+
 private struct CategoryFilterButton: View {
-    let title: String
+    let category: BlockCategory
     let isSelected: Bool
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
-            Text(title)
+            Text(category.rawValue)
                 .font(.caption2.bold())
                 .foregroundStyle(isSelected ? Color.black : Color.white)
                 .padding(.horizontal, 10)
