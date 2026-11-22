@@ -1681,6 +1681,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private var pitch: Float = -0.15
     private var moveInput = SIMD2<Float>(0, 0)
     private var lastFrameTime: TimeInterval?
+    // Keep SwiftUI/state publication work off the 60 FPS render cadence.
+    private var lastMainThreadUpdateTime: TimeInterval = 0
+    private var pendingNightCycle: Bool?
+    private var pendingWeatherCycle = false
     private var nightProgress: Float = 0.0
 
     override init() {
@@ -5456,7 +5460,22 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let shouldSyncNet = (netSyncTimer >= 0.35 && multiplayerEnabled)
         if shouldSyncNet { netSyncTimer = 0 }
 
+        // Preserve infrequent world events until the next main-thread tick.
+        if let toggledCycleNight { pendingNightCycle = toggledCycleNight }
+        if nextWeatherCycle && activeDimension == .overworld { pendingWeatherCycle = true }
+
+        // SceneKit camera movement stays smooth at render frequency. SwiftUI-facing
+        // state and chunk maintenance are deliberately capped at 10 updates/second.
+        updateCameraTransform()
+        guard time - lastMainThreadUpdateTime >= 0.10 else { return }
+        lastMainThreadUpdateTime = time
+
         let updatedNight = nightProgress
+        let nightToApply = pendingNightCycle
+        pendingNightCycle = nil
+        let weatherCycleToApply = pendingWeatherCycle
+        pendingWeatherCycle = false
+
         DispatchQueue.main.async {
             self.connectedPeerCount = self.lanManager.connectedPeers.count
             self.isUnderwater = headSubmerged
@@ -5528,8 +5547,8 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                     self.applyDamage(1, reason: "Starvation")
                 }
             } else { self.starvationTimer = 0 }
-            if let nextNight = toggledCycleNight { self.isNightMode = nextNight }
-            if nextWeatherCycle && self.activeDimension == .overworld { self.cycleWeather() }
+            if let nextNight = nightToApply { self.isNightMode = nextNight }
+            if weatherCycleToApply { self.cycleWeather() }
             if shouldUpdateSky { self.applySkyLighting(progress: updatedNight) }
             self.updateChunksAroundPlayer()
             self.tickFurnace(dt: Double(dt))
@@ -5550,7 +5569,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             }
             if landedFallDamage > 0 { self.applyDamage(landedFallDamage, reason: "Fall damage") }
             if let hazard = hazardHit { self.applyDamage(2, reason: hazard) }
-            self.updateCameraTransform()
             self.syncPlayerHUD()
         }
     }
