@@ -1683,6 +1683,11 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private var lastFrameTime: TimeInterval?
     // Keep SwiftUI/state publication work off the 60 FPS render cadence.
     private var lastMainThreadUpdateTime: TimeInterval = 0
+    // Expensive world subsystems run at bounded rates instead of every render frame.
+    private var mobSimulationAccumulator: Float = 0
+    private var villagerSimulationAccumulator: Float = 0
+    private var blockVisibilityAccumulator: Float = 0
+    private var redstoneUpdateAccumulator: Float = 0
     private var pendingNightCycle: Bool?
     private var pendingWeatherCycle = false
     private var nightProgress: Float = 0.0
@@ -5276,7 +5281,11 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let dt: Float
         if let prev = lastFrameTime { dt = min(0.05, max(0.001, Float(time - prev))) } else { dt = 0.016 }
         lastFrameTime = time
-        updateRedstoneSensors(at: time)
+        redstoneUpdateAccumulator += dt
+        if redstoneUpdateAccumulator >= 0.10 {
+            redstoneUpdateAccumulator = 0
+            updateRedstoneSensors(at: time)
+        }
         miningFatigueRemaining = max(0, miningFatigueRemaining - dt)
         dolphinGuideAchievementTimer = max(0, dolphinGuideAchievementTimer - dt)
 
@@ -5438,14 +5447,30 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
 
         }
-        updateMobsArrowsAndDrops(dt: dt)
-        updateVillagerSchedules(dt: dt)
+        mobSimulationAccumulator += dt
+        if mobSimulationAccumulator >= 0.05 {
+            let simulationDelta = min(0.20, mobSimulationAccumulator)
+            mobSimulationAccumulator = 0
+            updateMobsArrowsAndDrops(dt: simulationDelta)
+        }
+        villagerSimulationAccumulator += dt
+        if villagerSimulationAccumulator >= 0.50 {
+            let simulationDelta = min(1.0, villagerSimulationAccumulator)
+            villagerSimulationAccumulator = 0
+            updateVillagerSchedules(dt: simulationDelta)
+        }
 
-        let viewSq = maxViewDistance * maxViewDistance
-        for (coord, node) in blockNodes {
-            let dx = coord.scnVector.x - playerPos.x
-            let dz = coord.scnVector.z - playerPos.z
-            node.isHidden = (dx * dx + dz * dz) > viewSq
+        // Updating visibility for every individual block node at 60 FPS is costly.
+        // A 5 Hz visibility pass is visually sufficient for this voxel view distance.
+        blockVisibilityAccumulator += dt
+        if blockVisibilityAccumulator >= 0.20 {
+            blockVisibilityAccumulator = 0
+            let viewSq = maxViewDistance * maxViewDistance
+            for (coord, node) in blockNodes {
+                let dx = coord.scnVector.x - playerPos.x
+                let dz = coord.scnVector.z - playerPos.z
+                node.isHidden = (dx * dx + dz * dz) > viewSq
+            }
         }
 
         if gameMode == .survival && wishLen > 0.01 { hungerDrainTimer += dt }
@@ -6343,7 +6368,10 @@ struct VoxelSceneView: UIViewRepresentable {
         view.delegate = controller
         view.isPlaying = true
         view.loops = true
-        view.antialiasingMode = .multisampling2X
+        // Multisample antialiasing is expensive on mobile GPUs for a voxel scene.
+        view.antialiasingMode = .none
+        view.preferredFramesPerSecond = 60
+        view.rendersContinuously = true
         view.backgroundColor = UIColor(red: 0.53, green: 0.78, blue: 0.98, alpha: 1.0)
 
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
