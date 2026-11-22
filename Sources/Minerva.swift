@@ -7628,35 +7628,14 @@ struct VoxelGameView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(world.visibleBlocks) { block in
-                            let selected = world.selectedBlock == block
-                            let qty = world.count(for: block)
-                            Button {
+                            BlockPaletteButton(
+                                block: block,
+                                quantity: world.count(for: block),
+                                isSelected: world.selectedBlock == block
+                            ) {
                                 world.selectedBlock = block
                                 world.hotbarSlots[world.hotbarSelection] = block
                                 world.activeTool = .place
-                            } label: {
-                                VStack(spacing: 3) {
-                                    ZStack(alignment: .bottomTrailing) {
-                                        Image(uiImage: block.previewImage)
-                                            .interpolation(.none)
-                                            .resizable()
-                                            .frame(width: 28, height: 28)
-                                            .clipShape(RoundedRectangle(cornerRadius: 5))
-                                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.black.opacity(0.35), lineWidth: 1))
-                                        Text("\(qty)")
-                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 3)
-                                            .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 3))
-                                    }
-                                    Text(block.rawValue)
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                }
-                                .padding(6)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Color.white.opacity(0.32) : Color.black.opacity(0.45)))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.yellow : Color.white.opacity(0.2), lineWidth: selected ? 2 : 1))
                             }
                         }
                     }
@@ -7716,6 +7695,53 @@ struct VoxelGameView: View {
                 world.pauseGame()
             }
         }
+    }
+}
+
+
+/// Kept separate from VoxelGameView so Swift's type checker does not have to
+/// infer the entire block-palette button as part of the already-large HUD view.
+private struct BlockPaletteButton: View {
+    let block: BlockType
+    let quantity: Int
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 3) {
+                ZStack(alignment: .bottomTrailing) {
+                    Image(uiImage: block.previewImage)
+                        .interpolation(.none)
+                        .resizable()
+                        .frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                        )
+                    Text(String(quantity))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 3)
+                        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 3))
+                }
+                Text(block.rawValue)
+                    .font(.caption2.bold())
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+            }
+            .padding(6)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.white.opacity(0.32) : Color.black.opacity(0.45))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.yellow : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
