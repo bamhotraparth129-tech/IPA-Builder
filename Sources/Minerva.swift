@@ -1504,6 +1504,7 @@ enum CameraMode: String, CaseIterable {
 
 final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     @Published var selectedBlock: BlockType = .grass
+    weak var activeSceneView: SCNView?
     @Published var selectedCategory: BlockCategory = .all
     @Published var activeTool: InteractionTool = .place
     @Published var cameraMode: CameraMode = .firstPerson
@@ -1683,11 +1684,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private var lastFrameTime: TimeInterval?
     // Keep SwiftUI/state publication work off the 60 FPS render cadence.
     private var lastMainThreadUpdateTime: TimeInterval = 0
-    // Expensive world subsystems run at bounded rates instead of every render frame.
-    private var mobSimulationAccumulator: Float = 0
-    private var villagerSimulationAccumulator: Float = 0
-    private var blockVisibilityAccumulator: Float = 0
-    private var redstoneUpdateAccumulator: Float = 0
     private var pendingNightCycle: Bool?
     private var pendingWeatherCycle = false
     private var nightProgress: Float = 0.0
@@ -1756,6 +1752,22 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         statusMessage = mode == .creative
             ? "Creative mode: unlimited block placement"
             : "Survival mode: collect and manage resources"
+    }
+
+    /// Stops player input and the SceneKit render loop while the game is paused.
+    /// Saving is performed before leaving gameplay so the selected world is preserved.
+    func pauseGame() {
+        moveInput = SIMD2<Float>(0, 0)
+        isSprinting = false
+        lastFrameTime = nil
+        activeSceneView?.isPlaying = false
+        saveWorld()
+    }
+
+    /// Restarts the render loop and resets frame timing to avoid a large delta after a pause.
+    func resumeGame() {
+        lastFrameTime = nil
+        activeSceneView?.isPlaying = true
     }
 
     func selectHotbarSlot(_ index: Int) {
@@ -5281,11 +5293,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let dt: Float
         if let prev = lastFrameTime { dt = min(0.05, max(0.001, Float(time - prev))) } else { dt = 0.016 }
         lastFrameTime = time
-        redstoneUpdateAccumulator += dt
-        if redstoneUpdateAccumulator >= 0.10 {
-            redstoneUpdateAccumulator = 0
-            updateRedstoneSensors(at: time)
-        }
+        updateRedstoneSensors(at: time)
         miningFatigueRemaining = max(0, miningFatigueRemaining - dt)
         dolphinGuideAchievementTimer = max(0, dolphinGuideAchievementTimer - dt)
 
@@ -5447,30 +5455,14 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
 
         }
-        mobSimulationAccumulator += dt
-        if mobSimulationAccumulator >= 0.05 {
-            let simulationDelta = min(0.20, mobSimulationAccumulator)
-            mobSimulationAccumulator = 0
-            updateMobsArrowsAndDrops(dt: simulationDelta)
-        }
-        villagerSimulationAccumulator += dt
-        if villagerSimulationAccumulator >= 0.50 {
-            let simulationDelta = min(1.0, villagerSimulationAccumulator)
-            villagerSimulationAccumulator = 0
-            updateVillagerSchedules(dt: simulationDelta)
-        }
+        updateMobsArrowsAndDrops(dt: dt)
+        updateVillagerSchedules(dt: dt)
 
-        // Updating visibility for every individual block node at 60 FPS is costly.
-        // A 5 Hz visibility pass is visually sufficient for this voxel view distance.
-        blockVisibilityAccumulator += dt
-        if blockVisibilityAccumulator >= 0.20 {
-            blockVisibilityAccumulator = 0
-            let viewSq = maxViewDistance * maxViewDistance
-            for (coord, node) in blockNodes {
-                let dx = coord.scnVector.x - playerPos.x
-                let dz = coord.scnVector.z - playerPos.z
-                node.isHidden = (dx * dx + dz * dz) > viewSq
-            }
+        let viewSq = maxViewDistance * maxViewDistance
+        for (coord, node) in blockNodes {
+            let dx = coord.scnVector.x - playerPos.x
+            let dz = coord.scnVector.z - playerPos.z
+            node.isHidden = (dx * dx + dz * dz) > viewSq
         }
 
         if gameMode == .survival && wishLen > 0.01 { hungerDrainTimer += dt }
@@ -6156,6 +6148,15 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
     }
 
+    func performCrosshairAction() {
+        guard let view = activeSceneView else {
+            statusMessage = "Game view is still loading"
+            return
+        }
+        let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        handleTap(at: point, in: view)
+    }
+
     private func tryIgniteObsidianFrame(around coord: BlockCoord) -> Bool {
         for dx in -1...1 {
             for dy in -1...1 {
@@ -6364,21 +6365,25 @@ struct VoxelSceneView: UIViewRepresentable {
     func makeUIView(context: Context) -> SCNView {
         let view = SCNView()
         view.scene = controller.scene
+        controller.activeSceneView = view
         view.pointOfView = controller.cameraNode
         view.delegate = controller
         view.isPlaying = true
         view.loops = true
-        // Multisample antialiasing is expensive on mobile GPUs for a voxel scene.
-        view.antialiasingMode = .none
-        view.preferredFramesPerSecond = 60
-        view.rendersContinuously = true
+        view.antialiasingMode = .multisampling2X
         view.backgroundColor = UIColor(red: 0.53, green: 0.78, blue: 0.98, alpha: 1.0)
 
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         pan.maximumNumberOfTouches = 1
+        pan.cancelsTouchesInView = false
+        pan.delaysTouchesBegan = false
         view.addGestureRecognizer(pan)
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.numberOfTapsRequired = 1
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesBegan = false
+        tap.require(toFail: pan)
         view.addGestureRecognizer(tap)
 
         context.coordinator.scnView = view
@@ -6387,6 +6392,14 @@ struct VoxelSceneView: UIViewRepresentable {
 
     func updateUIView(_ uiView: SCNView, context: Context) {
         uiView.pointOfView = controller.cameraNode
+    }
+
+    static func dismantleUIView(_ uiView: SCNView, coordinator: Coordinator) {
+        uiView.isPlaying = false
+        uiView.delegate = nil
+        if coordinator.controller.activeSceneView === uiView {
+            coordinator.controller.activeSceneView = nil
+        }
     }
 
     final class Coordinator: NSObject {
@@ -6916,13 +6929,300 @@ struct VillagerTradeSheetView: View {
     }
 }
 
-// MARK: - HUD & Game UI
+// MARK: - Main Menu, Settings & Help
 
-struct VoxelGameView: View {
-    @StateObject private var world = VoxelWorldController()
+struct MinervaMainMenuView: View {
+    @ObservedObject var world: VoxelWorldController
+    let onPlay: () -> Void
+    let onSettings: () -> Void
+    let onHowToPlay: () -> Void
+
+    @State private var showNewWorldConfirmation = false
 
     var body: some View {
         ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.035, green: 0.09, blue: 0.13), Color(red: 0.06, green: 0.19, blue: 0.17), Color(red: 0.025, green: 0.055, blue: 0.09)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            // Subtle block-like background decoration
+            GeometryReader { proxy in
+                ZStack {
+                    ForEach(0..<18, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(index.isMultiple(of: 2) ? Color.green.opacity(0.10) : Color.white.opacity(0.045))
+                            .frame(width: CGFloat(38 + (index % 4) * 16), height: CGFloat(38 + (index % 4) * 16))
+                            .rotationEffect(.degrees(Double(index * 11)))
+                            .position(
+                                x: CGFloat((index * 83 + 31) % max(Int(proxy.size.width), 1)),
+                                y: CGFloat((index * 57 + 19) % max(Int(proxy.size.height), 1))
+                            )
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 18) {
+                    VStack(spacing: 7) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(LinearGradient(colors: [.green.opacity(0.95), .green.opacity(0.55)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 76, height: 76)
+                            Image(systemName: "cube.transparent.fill")
+                                .font(.system(size: 38, weight: .black))
+                                .foregroundStyle(.white)
+                        }
+                        Text("MINERVA")
+                            .font(.system(size: 34, weight: .black, design: .rounded))
+                            .tracking(4)
+                            .foregroundStyle(.white)
+                        Text("BUILD • EXPLORE • SURVIVE")
+                            .font(.caption2.weight(.bold))
+                            .tracking(2.2)
+                            .foregroundStyle(.green.opacity(0.9))
+                    }
+                    .padding(.top, 22)
+
+                    VStack(spacing: 10) {
+                        Button(action: onPlay) {
+                            Label("PLAY", systemImage: "play.fill")
+                                .font(.headline.weight(.black))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 15)
+                        }
+                        .buttonStyle(MinervaMenuButtonStyle(tint: .green))
+
+                        HStack(spacing: 10) {
+                            Button {
+                                world.selectWorldSlot(world.activeSlot)
+                                onPlay()
+                            } label: {
+                                Label("CONTINUE", systemImage: "arrow.clockwise")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                            }
+                            .buttonStyle(MinervaMenuButtonStyle(tint: .blue))
+
+                            Button { showNewWorldConfirmation = true } label: {
+                                Label("NEW WORLD", systemImage: "plus.square.fill")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                            }
+                            .buttonStyle(MinervaMenuButtonStyle(tint: .orange))
+                        }
+                    }
+                    .padding(.horizontal, 22)
+
+                    VStack(alignment: .leading, spacing: 11) {
+                        Text("WORLD SELECT")
+                            .font(.caption.weight(.heavy))
+                            .tracking(1.5)
+                            .foregroundStyle(.white.opacity(0.72))
+                        HStack(spacing: 9) {
+                            ForEach(1...3, id: \.self) { slot in
+                                Button {
+                                    world.selectWorldSlot(slot)
+                                } label: {
+                                    VStack(spacing: 5) {
+                                        Image(systemName: world.activeSlot == slot ? "checkmark.circle.fill" : "globe")
+                                            .font(.title3)
+                                        Text("WORLD \(slot)")
+                                            .font(.caption2.bold())
+                                    }
+                                    .foregroundStyle(world.activeSlot == slot ? .black : .white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(world.activeSlot == slot ? Color.yellow : Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.14), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 22)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("GAME MODE")
+                            .font(.caption.weight(.heavy))
+                            .tracking(1.5)
+                            .foregroundStyle(.white.opacity(0.72))
+                        HStack(spacing: 10) {
+                            ForEach(GameMode.allCases, id: \.self) { mode in
+                                Button { world.setGameMode(mode) } label: {
+                                    Label(mode.rawValue, systemImage: mode == .creative ? "hammer.fill" : "heart.fill")
+                                        .font(.subheadline.bold())
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .foregroundStyle(world.gameMode == mode ? .black : .white)
+                                        .background(world.gameMode == mode ? Color.yellow : Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        Text("Dimension: \(world.activeDimension.rawValue)  ·  Slot: \(world.activeSlot)")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.65))
+                    }
+                    .padding(.horizontal, 22)
+
+                    VStack(spacing: 10) {
+                        Button {
+                            world.toggleMultiplayerLobby()
+                        } label: {
+                            Label(world.multiplayerEnabled ? "MULTIPLAYER: SEARCHING" : "MULTIPLAYER / LAN", systemImage: "person.2.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 13)
+                        }
+                        .buttonStyle(MinervaMenuButtonStyle(tint: .purple))
+
+                        HStack(spacing: 10) {
+                            Button(action: onSettings) {
+                                Label("SETTINGS", systemImage: "gearshape.fill")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                            }
+                            .buttonStyle(MinervaMenuButtonStyle(tint: .gray))
+
+                            Button(action: onHowToPlay) {
+                                Label("HOW TO PLAY", systemImage: "questionmark.circle.fill")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                            }
+                            .buttonStyle(MinervaMenuButtonStyle(tint: .gray))
+                        }
+                    }
+                    .padding(.horizontal, 22)
+
+                    Text("MINERVA  •  VOXEL SANDBOX")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .tracking(1.4)
+                        .foregroundStyle(.white.opacity(0.35))
+                        .padding(.bottom, 16)
+                }
+                .frame(maxWidth: 620)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .confirmationDialog("Create a new world?", isPresented: $showNewWorldConfirmation, titleVisibility: .visible) {
+            Button("Generate New World", role: .destructive) {
+                world.regenerateNewWorld()
+                onPlay()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This regenerates the currently selected world slot and dimension.")
+        }
+    }
+}
+
+struct MinervaMenuButtonStyle: ButtonStyle {
+    var tint: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.heavy))
+            .foregroundStyle(.white)
+            .background(tint.opacity(configuration.isPressed ? 0.55 : 0.78), in: RoundedRectangle(cornerRadius: 13))
+            .overlay(RoundedRectangle(cornerRadius: 13).stroke(Color.white.opacity(0.18), lineWidth: 1))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+struct MinervaSettingsView: View {
+    @ObservedObject var world: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmWorldReset = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Gameplay") {
+                    Picker("Game mode", selection: Binding(get: { world.gameMode }, set: { world.setGameMode($0) })) {
+                        ForEach(GameMode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
+                    }
+                    Picker("Dimension", selection: Binding(get: { world.activeDimension }, set: { world.selectDimension($0) })) {
+                        ForEach(GameDimension.allCases) { dimension in Text(dimension.rawValue).tag(dimension) }
+                    }
+                    Picker("World slot", selection: Binding(get: { world.activeSlot }, set: { world.selectWorldSlot($0) })) {
+                        ForEach(1...3, id: \.self) { slot in Text("World \(slot)").tag(slot) }
+                    }
+                }
+                Section("World") {
+                    Toggle("Automatic day / night cycle", isOn: Binding(get: { world.isAutoCycleEnabled }, set: { _ in world.toggleAutoCycle() }))
+                    Toggle("Multiplayer LAN", isOn: Binding(get: { world.multiplayerEnabled }, set: { _ in world.toggleMultiplayerLobby() }))
+                    Button("Regenerate current world", role: .destructive) { confirmWorldReset = true }
+                }
+                Section("Camera") {
+                    Button("Switch camera perspective") { world.toggleCameraMode() }
+                    Text("Current: \(world.cameraMode.rawValue)").foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .confirmationDialog("Regenerate this world?", isPresented: $confirmWorldReset, titleVisibility: .visible) {
+                Button("Regenerate World", role: .destructive) { world.regenerateNewWorld() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The current world and its saved changes in this dimension will be replaced.")
+            }
+        }
+    }
+}
+
+struct MinervaHowToPlayView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Movement") {
+                    Label("Use the on-screen directional controls to move.", systemImage: "arrow.up.left.and.arrow.down.right")
+                    Label("Use JUMP to jump and the camera control to change perspective.", systemImage: "arrow.up.circle")
+                }
+                Section("Building") {
+                    Label("Choose a block from the inventory strip or hotbar.", systemImage: "square.grid.3x3.fill")
+                    Label("Aim at a surface, then tap PLACE to build.", systemImage: "plus.square.fill")
+                    Label("Aim at a block, then tap BREAK to mine it.", systemImage: "hammer.fill")
+                }
+                Section("Survival & World") {
+                    Label("Manage health, hunger, equipment and resources.", systemImage: "heart.fill")
+                    Label("Use the top controls for crafting, inventory, weather, dimensions and world options.", systemImage: "slider.horizontal.3")
+                }
+            }
+            .navigationTitle("How to Play")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+// MARK: - HUD & Game UI
+
+struct VoxelGameView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var world = VoxelWorldController()
+    @State private var isShowingMainMenu = true
+    @State private var isShowingSettings = false
+    @State private var isShowingHowToPlay = false
+
+    var body: some View {
+        ZStack {
+            if isShowingMainMenu {
+                MinervaMainMenuView(
+                    world: world,
+                    onPlay: {
+                        world.resumeGame()
+                        isShowingMainMenu = false
+                    },
+                    onSettings: { isShowingSettings = true },
+                    onHowToPlay: { isShowingHowToPlay = true }
+                )
+            } else {
             VoxelSceneView(controller: world)
                 .ignoresSafeArea()
 
@@ -6933,7 +7233,20 @@ struct VoxelGameView: View {
                 .allowsHitTesting(false)
 
             VStack(spacing: 7) {
-                HStack(spacing: 6) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                    Button {
+                        world.pauseGame()
+                        isShowingMainMenu = true
+                    } label: {
+                        Image(systemName: "house.fill")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Main menu")
+
                     Picker("Tool", selection: $world.activeTool) {
                         ForEach(InteractionTool.allCases, id: \.self) { tool in
                             Text(tool.rawValue).tag(tool)
@@ -7080,8 +7393,9 @@ struct VoxelGameView: View {
                         .background(.ultraThinMaterial, in: Capsule())
                     }
                 }
+                .padding(.horizontal, 2)
                 .padding(.horizontal)
-                .padding(.top, 8)
+                .padding(.top, 4)
 
                 VStack(spacing: 4) {
                     HStack(spacing: 6) {
@@ -7230,6 +7544,31 @@ struct VoxelGameView: View {
                             }
                         }
 
+                        HStack(spacing: 7) {
+                            Button {
+                                world.activeTool = .place
+                                world.performCrosshairAction()
+                            } label: {
+                                Label("PLACE", systemImage: "plus.square.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(.green.opacity(0.82), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            Button {
+                                world.activeTool = .breakBlock
+                                world.performCrosshairAction()
+                            } label: {
+                                Label("BREAK", systemImage: "hammer.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(.red.opacity(0.78), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+
                         Button { world.jump() } label: {
                             Text("JUMP")
                                 .font(.caption.bold())
@@ -7324,6 +7663,13 @@ struct VoxelGameView: View {
                 }
                 .padding(.bottom, 10)
             }
+            }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            MinervaSettingsView(world: world)
+        }
+        .sheet(isPresented: $isShowingHowToPlay) {
+            MinervaHowToPlayView()
         }
         .sheet(isPresented: $world.showCraftSheet) {
             CraftingSheetView(world: world)
@@ -7344,6 +7690,16 @@ struct VoxelGameView: View {
         }
         .sheet(isPresented: $world.showBrewingSheet) {
             BrewingSheetView(world: world)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                if !isShowingMainMenu { world.resumeGame() }
+            case .inactive, .background:
+                world.pauseGame()
+            @unknown default:
+                world.pauseGame()
+            }
         }
     }
 }
@@ -7381,4 +7737,6 @@ struct VoxelCraftApp: App {
             VoxelGameView()
         }
     }
+}
+
 }
