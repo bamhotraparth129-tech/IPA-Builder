@@ -1021,7 +1021,7 @@ enum EquipmentCraftCatalog {
         }
         let armorRecipes = [("Helmet", 5), ("Chestplate", 8), ("Leggings", 7), ("Boots", 4)].map { slot, amount in
             EquipmentRecipe(
-                id: "gear_\(tier.rawValue.lowercased())_\(slot.lowercased())",
+                id: "gear_\(tier.rawValue.lowercased())_\(slot.rawValue.lowercased())",
                 title: "\(tier.rawValue) \(slot)", tier: tier, tool: nil, armorSlot: slot,
                 ingredients: [(material, amount)]
             )
@@ -1320,6 +1320,8 @@ enum BlockType: String, Codable, CaseIterable, Identifiable {
             let mat = makePixelMaterial(kind: .portal, translucent: true); mat.emission.contents = UIColor(red: 0.62, green: 0.22, blue: 0.98, alpha: 0.7); box.materials = [mat, mat, mat, mat, mat, mat]
         case .seaLantern:
             let mat = makePixelMaterial(kind: .seaLantern); mat.emission.contents = UIColor(red: 0.65, green: 0.96, blue: 1.0, alpha: 0.65); box.materials = [mat, mat, mat, mat, mat, mat]
+        case .prismarine:
+            let mat = makePixelMaterial(kind: .stone); box.materials = [mat, mat, mat, mat, mat, mat]
         case .amethyst:
             let mat = makePixelMaterial(kind: .amethyst); mat.emission.contents = UIColor(red: 0.64, green: 0.35, blue: 0.92, alpha: 0.35); box.materials = [mat, mat, mat, mat, mat, mat]
         case .netherrack:
@@ -1860,7 +1862,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     var experienceLevel: Int {
-        // A compact progression curve: each next level costs progressively more XP.
         var remaining = max(0, experiencePoints)
         var level = 0
         var nextCost = 7
@@ -2032,7 +2033,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             return
         }
 
-        // Reboard the deployed boat without consuming another boat item.
         if let existingBoat = boatNode {
             let distance = simd_distance(
                 playerPos,
@@ -3062,7 +3062,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                 }
 
                 if activeDimension == .overworld && biome == .ocean && height <= 2 {
-                    // A real water column instead of the old one-block surface puddle.
                     let oceanHash = abs((x &* 73856093) ^ (z &* 19349663))
                     let waterDepth = 4 + oceanHash % 3
                     for waterY in 3...(3 + waterDepth) {
@@ -3149,8 +3148,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                     }
 
                     if biome == .ocean && height <= 2 {
-                        // Keep large structures inside their generating chunk to avoid
-                        // neighboring chunks overwriting their hulls during generation.
                         let localX = ((x % chunkSize) + chunkSize) % chunkSize
                         let localZ = ((z % chunkSize) + chunkSize) % chunkSize
                         if localX >= 2 && localX <= 4 && localZ >= 2 && localZ <= 4 {
@@ -3178,8 +3175,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             }
         }
 
-        // Deterministic underground points of interest. Each structure is contained
-        // within its owning chunk so neighboring chunk generation cannot overwrite it.
         if activeDimension == .overworld {
             let structureSeed = abs((chunk.cx &* 92837111) ^ (chunk.cz &* 689287499) ^ 0x45D9F3B)
             let centerX = minX + 3 + (structureSeed % 6)
@@ -3215,7 +3210,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeShipwreck(baseX: Int, baseY: Int, baseZ: Int, seed: Int) {
-        // A broken wooden hull, raised deck, mast and loot room on the ocean floor.
         for dx in 0...6 {
             for dz in 0...8 {
                 let edge = dx == 0 || dx == 6 || dz == 0 || dz == 8
@@ -3247,8 +3241,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         setBlockInternal(coord: chestA, type: .chest, markModified: false)
         setBlockInternal(coord: chestB, type: .chest, markModified: false)
 
-        // Seeded loot is stable across chunk reloads. Existing chest contents are
-        // never overwritten, so players cannot regenerate emptied treasure.
         let lootAKey = "\(chestA.x),\(chestA.y),\(chestA.z)"
         let lootBKey = "\(chestB.x),\(chestB.y),\(chestB.z)"
         if chestStorage[lootAKey] == nil {
@@ -3268,14 +3260,12 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             if seed % 7 == 0 { loot[BlockType.emeraldOre.rawValue] = 1 }
             chestStorage[lootBKey] = loot
         }
-        // A few missing planks make the wreck visibly damaged.
         for (dx, dz) in [(0, 3), (6, 5), (2, 8)] where (seed + dx * 7 + dz) % 2 == 0 {
             removeBlockInternal(at: BlockCoord(x: baseX + dx, y: baseY, z: baseZ + dz), markModified: false)
         }
     }
 
     private func placeCoralGarden(baseX: Int, baseY: Int, baseZ: Int, seed: Int) {
-        // Colorful coral-like clusters use existing voxel materials, so old saves remain compatible.
         let colors: [BlockType] = [.amethyst, .seaLantern, .glass, .glowstone]
         for cluster in 0..<5 {
             let cx = baseX + (seed >> (cluster + 1) & 3) + (cluster % 2)
@@ -3296,7 +3286,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                 }
             }
         }
-        // Kelp-like vertical growth along the garden edge.
         for offset in 0..<4 {
             let kx = baseX + 1 + offset
             let kz = baseZ + 6
@@ -3351,7 +3340,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeOceanMonument(baseX: Int, baseY: Int, baseZ: Int) {
-        // A compact submerged temple with lit corners and a central treasure chamber.
         for dx in 0...6 {
             for dz in 0...6 {
                 let perimeter = dx == 0 || dx == 6 || dz == 0 || dz == 6
@@ -3371,20 +3359,15 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let monumentChest = BlockCoord(x: baseX + 3, y: baseY + 1, z: baseZ + 3)
         setBlockInternal(coord: monumentChest, type: .chest, markModified: false)
         seedOceanChestLoot(at: monumentChest, seed: abs(baseX * 31 + baseZ * 17), rich: true)
-        // Each monument has one persistent-in-session boss guardian. The proximity
-        // guard in spawnElderGuardian prevents duplicates during nearby chunk refreshes.
         let elderPosition = SIMD3<Float>(Float(baseX + 3) + 0.5,
                                          Float(baseY + 2) + 0.35,
                                          Float(baseZ + 3) + 0.5)
         spawnElderGuardian(at: elderPosition)
-        // Open a doorway on the near wall.
         removeBlockInternal(at: BlockCoord(x: baseX + 3, y: baseY + 1, z: baseZ), markModified: false)
         removeBlockInternal(at: BlockCoord(x: baseX + 3, y: baseY + 2, z: baseZ), markModified: false)
     }
 
     private func placeUnderwaterCrystalCavern(baseX: Int, baseZ: Int, seed: Int) {
-        // A compact air-pocket cavern beneath the seabed. The existing voxel types
-        // are reused so worlds from earlier versions remain fully compatible.
         let floorY = 0
         for dx in 0...4 {
             for dz in 0...4 {
@@ -3404,14 +3387,11 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             }
         }
 
-        // A narrow air passage connects the chamber to the surrounding ocean.
         for dz in -2...0 {
             for dy in 1...2 {
                 removeBlockInternal(at: BlockCoord(x: baseX + 2, y: floorY + dy, z: baseZ + dz), markModified: false)
             }
         }
-        // Remove the water voxel immediately above the chamber to create a visible
-        // dive entrance and a breathable pocket below the ocean floor.
         removeBlockInternal(at: BlockCoord(x: baseX + 2, y: 3, z: baseZ + 2), markModified: false)
         let crystalPositions: [(Int, Int, Int)] = [(1, 1, 1), (3, 1, 1), (1, 1, 3), (3, 1, 3), (2, 2, 2)]
         for (dx, dy, dz) in crystalPositions {
@@ -3430,7 +3410,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeOceanRuin(baseX: Int, baseY: Int, baseZ: Int) {
-        // A compact, partially collapsed seabed ruin with a buried treasure chest.
         for dx in 0...3 {
             for dz in 0...3 where (dx == 0 || dx == 3 || dz == 0 || dz == 3) {
                 let coord = BlockCoord(x: baseX + dx, y: baseY, z: baseZ + dz)
@@ -3472,7 +3451,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeVillageHut(baseX: Int, baseY: Int, baseZ: Int) {
-        // Compact 5x5 village house. Deterministic placement keeps chunk generation repeatable.
         for dx in 0...4 {
             for dz in 0...4 {
                 setBlockInternal(coord: BlockCoord(x: baseX + dx, y: baseY, z: baseZ + dz), type: .cobblestone, markModified: false)
@@ -3485,18 +3463,15 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                 }
             }
         }
-        // Doorway and interior furnishing
         setBlockInternal(coord: BlockCoord(x: baseX + 2, y: baseY + 1, z: baseZ), type: .door, markModified: false)
         setBlockInternal(coord: BlockCoord(x: baseX + 1, y: baseY + 1, z: baseZ + 2), type: .bed, markModified: false)
         setBlockInternal(coord: BlockCoord(x: baseX + 3, y: baseY + 1, z: baseZ + 2), type: .craftingTable, markModified: false)
         setBlockInternal(coord: BlockCoord(x: baseX + 3, y: baseY + 1, z: baseZ + 3), type: .furnace, markModified: false)
-        // Small farm plot beside the house
         for dx in 1...3 {
             let cropCoord = BlockCoord(x: baseX + dx, y: baseY + 1, z: baseZ + 5)
             setBlockInternal(coord: cropCoord, type: .crop, markModified: false)
             cropStages[cropCoord] = 2
         }
-        // A short path leading to the entrance
         for step in 1...3 {
             let pathCoord = BlockCoord(x: baseX + 2, y: baseY - 1, z: baseZ - step)
             if blocks[pathCoord] == nil {
@@ -3579,8 +3554,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func oreForCoordinate(x: Int, y: Int, z: Int) -> BlockType {
-        // Small deterministic 3D vein cells create connected deposits rather than
-        // isolated single-block ore speckles. The original depth rules remain as fallback.
         let cellX = x >> 2
         let cellY = y >> 1
         let cellZ = z >> 2
@@ -3640,7 +3613,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             for by in y {
                 for bz in z {
                     let coord = BlockCoord(x: bx, y: by, z: bz)
-                    // Never carve bedrock or player-modified blocks.
                     guard by > 0, !modifiedCoords.contains(coord) else { continue }
                     blocks.removeValue(forKey: coord)
                     blockNodes[coord]?.removeFromParentNode()
@@ -3729,7 +3701,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeRuinedPortal(centerX: Int, baseY: Int, centerZ: Int, seed: Int) {
-        // A broken, partially buried frame using existing obsidian and netherrack blocks.
         let frame: [(Int, Int)] = [(-2, 0), (-2, 1), (-2, 2), (-1, 3), (0, 3), (1, 3), (2, 2), (2, 1), (2, 0), (1, 0)]
         for (dx, dy) in frame {
             let coord = BlockCoord(x: centerX + dx, y: baseY + dy, z: centerZ)
@@ -3789,7 +3760,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeSwampHut(baseX: Int, baseY: Int, baseZ: Int) {
-        // Small raised hut with a mossy foundation and a storage chest.
         for dx in 0...4 {
             for dz in 0...4 {
                 let edge = dx == 0 || dx == 4 || dz == 0 || dz == 4
@@ -3810,7 +3780,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func placeJungleTemple(baseX: Int, baseY: Int, baseZ: Int) {
-        // Compact overgrown ruin; deliberately uses existing blocks and chest storage.
         for dx in 0...5 {
             for dz in 0...5 {
                 let edge = dx == 0 || dx == 5 || dz == 0 || dz == 5
@@ -3897,7 +3866,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             removed.node.removeFromParentNode()
         }
 
-        // Spawn livestock in pairs so breeding is possible without waiting for another chunk.
         let kinds: [MobKind]
         switch activeDimension {
         case .overworld:
@@ -3960,8 +3928,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             mobs.append(mob)
         }
 
-        // Hostile mobs can also inhabit nearby cave pockets instead of every spawn
-        // being placed on the surface. The cap keeps the scene workload bounded.
         if activeDimension == .overworld && mobs.count < 14 {
             for _ in 0..<10 where mobs.count < 14 {
                 let caveX = cx + Int.random(in: -7...7)
@@ -3985,7 +3951,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             }
         }
 
-        // Fish are spawned only in ocean water, never on dry land.
         if activeDimension == .overworld {
             for _ in 0..<3 where mobs.count < 14 && mobs.filter({ $0.kind == .fish }).count < 6 {
                 let fx = cx + Int.random(in: -7...7)
@@ -4015,7 +3980,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                     node.name = "mob_\(mob.id.uuidString)"; mobsRootNode.addChildNode(node); mobs.append(mob); break
                 }
             }
-            // Guardians patrol deeper ocean water and remain capped to avoid crowding.
             if mobs.filter({ $0.kind == .guardian }).count < 2 && mobs.count < 14 {
                 for _ in 0..<8 {
                     let gx = cx + Int.random(in: -8...8), gz = cz + Int.random(in: -8...8), gy = Int.random(in: 3...6)
@@ -4042,11 +4006,11 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
         let preferred: [BlockType]
         switch villager.profession {
-        case .farmer: preferred = [.crop, .compost] // crop plots act as farmer work areas
+        case .farmer: preferred = [.crop]
         case .miner: preferred = [.furnace]
         case .builder: preferred = [.craftingTable]
         }
-        let candidates = blocks.keys.filter { preferred.contains(blocks[$0] ?? .air) }
+        let candidates = blocks.keys.filter { preferred.contains(blocks[$0] ?? .grass) }
         if let station = candidates.min(by: { a, b in
             let da = simd_distance(SIMD3<Float>(Float(a.x) + 0.5, Float(a.y) + 1, Float(a.z) + 0.5), villager.position)
             let db = simd_distance(SIMD3<Float>(Float(b.x) + 0.5, Float(b.y) + 1, Float(b.z) + 0.5), villager.position)
@@ -4072,7 +4036,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let goalCell = VillagerPathCell(x: Int(floor(target.x)), z: Int(floor(target.z)))
         if startCell == goalCell { return [] }
 
-        let startFloor = highestSolidY(atX: startCell.x, z: startCell.z)
         var queue: [VillagerPathCell] = [startCell]
         var queueIndex = 0
         var previous: [VillagerPathCell: VillagerPathCell] = [:]
@@ -4106,954 +4069,210 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         guard found else { return [] }
         var reversed: [VillagerPathCell] = [goalCell]
         var cursor = goalCell
-        while cursor != startCell, let parent = previous[cursor] {
+        while let parent = previous[cursor], parent != startCell {
+            reversed.append(parent)
             cursor = parent
-            if cursor != startCell { reversed.append(cursor) }
         }
-
-        return reversed.reversed().map { cell in
+        reversed.reverse()
+        return reversed.map { cell in
             let floorY = highestSolidY(atX: cell.x, z: cell.z)
             return SIMD3<Float>(Float(cell.x) + 0.5, Float(floorY) + 1.0, Float(cell.z) + 0.5)
         }
     }
 
-    private func updateVillagerNavigation(_ villager: WorldMob, target: SIMD3<Float>, dt: Float) {
-        villager.pathRefreshTimer -= dt
-        if villager.pathRefreshTimer <= 0 {
-            villager.navigationPath = buildVillagerPath(from: villager.position, to: target)
-            villager.pathRefreshTimer = 1.0
+    private func advanceVillagerAlongPath(_ mob: WorldMob, toward target: SIMD3<Float>, speed: Float, dt: Float) -> Bool {
+        let toGoal = target - mob.position
+        let flatToGoal = SIMD2<Float>(toGoal.x, toGoal.z)
+        if simd_length(flatToGoal) <= 1.25 {
+            mob.navigationPath.removeAll()
+            return true
         }
 
-        while let waypoint = villager.navigationPath.first,
-              simd_length(SIMD2<Float>(waypoint.x - villager.position.x,
-                                       waypoint.z - villager.position.z)) < 0.42 {
-            villager.navigationPath.removeFirst()
+        mob.pathRefreshTimer -= dt
+        if mob.pathRefreshTimer <= 0 || mob.navigationPath.isEmpty {
+            mob.navigationPath = buildVillagerPath(from: mob.position, to: target)
+            mob.pathRefreshTimer = 1.15
         }
 
-        let destination = villager.navigationPath.first ?? target
-        let dx = destination.x - villager.position.x
-        let dz = destination.z - villager.position.z
-        if simd_length(SIMD2<Float>(dx, dz)) > 0.18 {
-            villager.yaw = atan2(-dx, -dz)
-            villager.isSleeping = false
-        } else {
-            villager.isSleeping = isNightMode
+        let waypoint = mob.navigationPath.first ?? target
+        let stepVector = waypoint - mob.position
+        let flatStep = SIMD2<Float>(stepVector.x, stepVector.z)
+        let dist = simd_length(flatStep)
+        if dist <= 0.35 && !mob.navigationPath.isEmpty {
+            mob.navigationPath.removeFirst()
         }
-    }
-
-    private func performVillagerFarmWork(_ villager: WorldMob, dt: Float) {
-        guard villager.profession == .farmer, !isNightMode, !villager.isBaby else { return }
-        villager.farmWorkTimer -= dt
-        guard villager.farmWorkTimer <= 0 else { return }
-        villager.farmWorkTimer = 5.0
-
-        let origin = BlockCoord(x: Int(floor(villager.position.x)),
-                                y: Int(floor(villager.position.y - 1)),
-                                z: Int(floor(villager.position.z)))
-        let matureCrop = cropStages.keys
-            .filter { coord in
-                guard blocks[coord] == .crop, (cropStages[coord] ?? 0) >= 3 else { return false }
-                let dx = coord.x - origin.x
-                let dz = coord.z - origin.z
-                return dx * dx + dz * dz <= 16 && abs(coord.y - origin.y) <= 2
-            }
-            .min { a, b in
-                let da = (a.x - origin.x) * (a.x - origin.x) + (a.z - origin.z) * (a.z - origin.z)
-                let db = (b.x - origin.x) * (b.x - origin.x) + (b.z - origin.z) * (b.z - origin.z)
-                return da < db
-            }
-
-        guard let crop = matureCrop else { return }
-        cropStages[crop] = 0
-        blockNodes[crop]?.scale = SCNVector3(1.0, 0.45, 1.0)
-        foodInventory[.wheat, default: 0] += 2
-        foodInventory[.seeds, default: 0] += 1
-        statusMessage = "Farmer harvested and replanted crops"
-        SoundEngine.shared.play(.pickup)
-        saveWorld()
-    }
-
-    private func updateVillagerSchedules(dt: Float) {
-        let villagers = mobs.filter { $0.kind == .villager && !$0.isBaby }
-        for villager in villagers {
-            performVillagerFarmWork(villager, dt: dt)
-        }
-        let bedCount = blocks.values.filter { $0 == .bed }.count
-        if villagers.count >= 2 && bedCount > villagers.count {
-            villagerGrowthTimer += dt
-            if villagerGrowthTimer >= 180 {
-                villagerGrowthTimer = 0
-                let parents = villagers.sorted { simd_distance($0.position, playerPos) < simd_distance($1.position, playerPos) }
-                if parents.count >= 2 {
-                    let a = parents[0].position
-                    let b = parents[1].position
-                    let spawn = SIMD3<Float>((a.x + b.x) * 0.5, max(a.y, b.y), (a.z + b.z) * 0.5)
-                    let node = makeMobNode(kind: .villager)
-                    let baby = WorldMob(kind: .villager, position: spawn, yaw: Float.random(in: 0...(Float.pi * 2)), hp: 8, wanderTimer: 2, node: node)
-                    baby.profession = parents[0].profession
-                    baby.isBaby = true
-                    baby.ageTimer = 120
-                    node.scale = SCNVector3(0.55, 0.55, 0.55)
-                    node.position = SCNVector3(spawn.x, spawn.y, spawn.z)
-                    mobsRootNode.addChildNode(node)
-                    assignVillagerDestinations(baby)
-                    mobs.append(baby)
-                    statusMessage = "A new villager has joined the village!"
-                    DispatchQueue.main.async { self.saveWorld() }
-                }
-            }
-        } else {
-            villagerGrowthTimer = 0
-        }
-    }
-
-    private func villagerScheduleTarget(_ villager: WorldMob) -> SIMD3<Float>? {
-        if isNightMode { return villager.homePosition }
-        return villager.workstationPosition ?? villager.homePosition
-    }
-
-    private func villageProfession(near position: SIMD3<Float>) -> VillagerProfession {
-        let x = Int(floor(position.x)), y = Int(floor(position.y)), z = Int(floor(position.z))
-        var best: (distance: Int, profession: VillagerProfession)? = nil
-        for dx in -8...8 {
-            for dy in -2...4 {
-                for dz in -8...8 {
-                    let coord = BlockCoord(x: x + dx, y: y + dy, z: z + dz)
-                    let profession: VillagerProfession?
-                    switch blocks[coord] {
-                    case .craftingTable?: profession = .builder
-                    case .furnace?: profession = .miner
-                    case .crop?: profession = .farmer
-                    default: profession = nil
-                    }
-                    guard let profession else { continue }
-                    let distance = dx * dx + dy * dy + dz * dz
-                    if best == nil || distance < best!.distance { best = (distance, profession) }
-                }
-            }
-        }
-        return best?.profession ?? .farmer
-    }
-
-    private func makeMobNode(kind: MobKind) -> SCNNode {
-        let container = SCNNode()
-        switch kind {
-        case .fish:
-            let body = SCNSphere(radius: 0.20)
-            let bodyMat = SCNMaterial(); bodyMat.diffuse.contents = UIColor(red: 0.95, green: 0.58, blue: 0.20, alpha: 1)
-            body.materials = [bodyMat]
-            let bodyNode = SCNNode(geometry: body)
-            let tail = SCNCone(topRadius: 0.015, bottomRadius: 0.13, height: 0.24)
-            let tailMat = SCNMaterial(); tailMat.diffuse.contents = UIColor(red: 0.98, green: 0.72, blue: 0.25, alpha: 1); tail.materials = [tailMat]
-            let tailNode = SCNNode(geometry: tail); tailNode.eulerAngles.z = .pi / 2; tailNode.position = SCNVector3(0, 0, 0.28)
-            let eyeMat = SCNMaterial(); eyeMat.diffuse.contents = UIColor.black
-            let eye = SCNSphere(radius: 0.025); eye.materials = [eyeMat]
-            let eyeNode = SCNNode(geometry: eye); eyeNode.position = SCNVector3(0.13, 0.06, -0.10)
-            container.addChildNode(bodyNode); container.addChildNode(tailNode); container.addChildNode(eyeNode)
-        case .dolphin:
-            let blue = SCNMaterial(); blue.diffuse.contents = UIColor(red: 0.36, green: 0.62, blue: 0.78, alpha: 1)
-            let body = SCNSphere(radius: 0.34); body.materials = [blue]
-            let bodyNode = SCNNode(geometry: body); bodyNode.scale = SCNVector3(1.0, 0.78, 1.65)
-            let snout = SCNCone(topRadius: 0.035, bottomRadius: 0.13, height: 0.38); snout.materials = [blue]
-            let snoutNode = SCNNode(geometry: snout); snoutNode.eulerAngles.x = .pi / 2; snoutNode.position = SCNVector3(0, -0.02, -0.48)
-            let fin = SCNBox(width: 0.12, height: 0.06, length: 0.32, chamferRadius: 0.03); fin.materials = [blue]
-            let finNode = SCNNode(geometry: fin); finNode.position = SCNVector3(0, -0.22, 0.10)
-            let tail = SCNBox(width: 0.34, height: 0.06, length: 0.20, chamferRadius: 0.03); tail.materials = [blue]
-            let tailNode = SCNNode(geometry: tail); tailNode.position = SCNVector3(0, 0, 0.58)
-            container.addChildNode(bodyNode); container.addChildNode(snoutNode); container.addChildNode(finNode); container.addChildNode(tailNode)
-        case .turtle:
-            let shellMat = SCNMaterial(); shellMat.diffuse.contents = UIColor(red: 0.22, green: 0.43, blue: 0.25, alpha: 1)
-            let shell = SCNSphere(radius: 0.38); shell.materials = [shellMat]
-            let shellNode = SCNNode(geometry: shell); shellNode.scale = SCNVector3(1.0, 0.48, 1.15); shellNode.position = SCNVector3(0, 0.16, 0)
-            let skin = SCNMaterial(); skin.diffuse.contents = UIColor(red: 0.48, green: 0.64, blue: 0.34, alpha: 1)
-            let head = SCNSphere(radius: 0.15); head.materials = [skin]
-            let headNode = SCNNode(geometry: head); headNode.position = SCNVector3(0, 0.12, -0.42)
-            for side: Float in [-1, 1] {
-                let leg = SCNBox(width: 0.13, height: 0.08, length: 0.28, chamferRadius: 0.04); leg.materials = [skin]
-                let legNode = SCNNode(geometry: leg); legNode.position = SCNVector3(side * 0.27, -0.04, -0.20); container.addChildNode(legNode)
-            }
-            container.addChildNode(shellNode); container.addChildNode(headNode)
-        case .guardian:
-            let teal = SCNMaterial(); teal.diffuse.contents = UIColor(red: 0.18, green: 0.62, blue: 0.58, alpha: 1)
-            let dark = SCNMaterial(); dark.diffuse.contents = UIColor(red: 0.08, green: 0.30, blue: 0.34, alpha: 1)
-            let body = SCNBox(width: 0.76, height: 0.76, length: 0.76, chamferRadius: 0.08); body.materials = [teal]
-            let bodyNode = SCNNode(geometry: body); container.addChildNode(bodyNode)
-            let eye = SCNSphere(radius: 0.12); let eyeMaterial = SCNMaterial(); eyeMaterial.diffuse.contents = UIColor(red: 1.0, green: 0.35, blue: 0.20, alpha: 1); eye.materials = [eyeMaterial]
-            let eyeNode = SCNNode(geometry: eye); eyeNode.position = SCNVector3(0, 0.12, -0.40); container.addChildNode(eyeNode)
-            for side: Float in [-1, 1] {
-                for row: Float in [-1, 0, 1] {
-                    let spike = SCNCone(topRadius: 0.015, bottomRadius: 0.11, height: 0.30); spike.materials = [dark]
-                    let spikeNode = SCNNode(geometry: spike)
-                    spikeNode.position = SCNVector3(side * 0.43, row * 0.22, 0)
-                    spikeNode.eulerAngles.z = side * .pi / 2
-                    container.addChildNode(spikeNode)
-                }
-            }
-        case .sheep:
-            let body = SCNBox(width: 0.72, height: 0.58, length: 0.95, chamferRadius: 0.03)
-            let m = SCNMaterial(); m.diffuse.contents = UIColor(red: 0.96, green: 0.96, blue: 0.97, alpha: 1.0); body.materials = [m]
-            let bn = SCNNode(geometry: body); bn.position = SCNVector3(0, 0.25, 0)
-            let head = SCNBox(width: 0.44, height: 0.42, length: 0.44, chamferRadius: 0.02)
-            let hm = SCNMaterial(); hm.diffuse.contents = UIColor(red: 0.85, green: 0.72, blue: 0.62, alpha: 1.0); head.materials = [hm]
-            let hn = SCNNode(geometry: head); hn.position = SCNVector3(0, 0.45, -0.56)
-            container.addChildNode(bn); container.addChildNode(hn)
-        case .pig:
-            let body = SCNBox(width: 0.68, height: 0.52, length: 0.90, chamferRadius: 0.03)
-            let m = SCNMaterial(); m.diffuse.contents = UIColor(red: 0.94, green: 0.62, blue: 0.66, alpha: 1.0); body.materials = [m]
-            let bn = SCNNode(geometry: body); bn.position = SCNVector3(0, 0.22, 0)
-            let snout = SCNBox(width: 0.34, height: 0.28, length: 0.34, chamferRadius: 0.02)
-            let sm = SCNMaterial(); sm.diffuse.contents = UIColor(red: 0.86, green: 0.48, blue: 0.54, alpha: 1.0); snout.materials = [sm]
-            let sn = SCNNode(geometry: snout); sn.position = SCNVector3(0, 0.34, -0.52)
-            container.addChildNode(bn); container.addChildNode(sn)
-        case .cow:
-            let body = SCNBox(width: 0.82, height: 0.62, length: 1.02, chamferRadius: 0.03)
-            let bm = SCNMaterial(); bm.diffuse.contents = UIColor(red: 0.34, green: 0.22, blue: 0.15, alpha: 1.0); body.materials = [bm]
-            let bn = SCNNode(geometry: body); bn.position = SCNVector3(0, 0.34, 0)
-            let head = SCNBox(width: 0.42, height: 0.42, length: 0.42, chamferRadius: 0.02)
-            let hm = SCNMaterial(); hm.diffuse.contents = UIColor(red: 0.82, green: 0.76, blue: 0.68, alpha: 1.0); head.materials = [hm]
-            let hn = SCNNode(geometry: head); hn.position = SCNVector3(0, 0.48, -0.62)
-            container.addChildNode(bn); container.addChildNode(hn)
-        case .chicken:
-            let body = SCNSphere(radius: 0.28)
-            let bm = SCNMaterial(); bm.diffuse.contents = UIColor(white: 0.94, alpha: 1.0); body.materials = [bm]
-            let bn = SCNNode(geometry: body); bn.position = SCNVector3(0, 0.35, 0)
-            let head = SCNBox(width: 0.22, height: 0.22, length: 0.22, chamferRadius: 0.02)
-            let hm = SCNMaterial(); hm.diffuse.contents = UIColor(white: 0.98, alpha: 1.0); head.materials = [hm]
-            let hn = SCNNode(geometry: head); hn.position = SCNVector3(0, 0.68, -0.20)
-            let beak = SCNBox(width: 0.12, height: 0.08, length: 0.12, chamferRadius: 0.01)
-            let cm = SCNMaterial(); cm.diffuse.contents = UIColor.orange; beak.materials = [cm]
-            let cn = SCNNode(geometry: beak); cn.position = SCNVector3(0, 0.63, -0.34)
-            container.addChildNode(bn); container.addChildNode(hn); container.addChildNode(cn)
-        case .wolf, .fox, .bear:
-            let fur = SCNMaterial()
-            switch kind {
-            case .wolf: fur.diffuse.contents = UIColor(red: 0.62, green: 0.64, blue: 0.67, alpha: 1)
-            case .fox: fur.diffuse.contents = UIColor(red: 0.88, green: 0.38, blue: 0.12, alpha: 1)
-            default: fur.diffuse.contents = UIColor(red: 0.34, green: 0.24, blue: 0.17, alpha: 1)
-            }
-            let body = SCNBox(width: kind == .bear ? 0.95 : 0.62, height: kind == .bear ? 0.78 : 0.52, length: kind == .bear ? 1.15 : 0.88, chamferRadius: 0.12)
-            body.materials = [fur]
-            let bodyNode = SCNNode(geometry: body); bodyNode.position = SCNVector3(0, kind == .bear ? 0.55 : 0.34, 0)
-            let head = SCNBox(width: kind == .bear ? 0.62 : 0.42, height: kind == .bear ? 0.55 : 0.40, length: kind == .bear ? 0.58 : 0.46, chamferRadius: 0.08)
-            head.materials = [fur]
-            let headNode = SCNNode(geometry: head); headNode.position = SCNVector3(0, kind == .bear ? 0.92 : 0.64, -0.48)
-            let dark = SCNMaterial(); dark.diffuse.contents = UIColor(white: 0.10, alpha: 1)
-            let nose = SCNSphere(radius: 0.055); nose.materials = [dark]
-            let noseNode = SCNNode(geometry: nose); noseNode.position = SCNVector3(0, kind == .bear ? 0.90 : 0.62, -0.76)
-            container.addChildNode(bodyNode); container.addChildNode(headNode); container.addChildNode(noseNode)
-            for side: Float in [-1, 1] {
-                let ear = SCNCone(topRadius: 0.01, bottomRadius: 0.10, height: 0.20); ear.materials = [fur]
-                let earNode = SCNNode(geometry: ear); earNode.position = SCNVector3(side * 0.15, kind == .bear ? 1.22 : 0.90, -0.47)
-                container.addChildNode(earNode)
-                for legZ: Float in [-1, 1] {
-                    let leg = SCNBox(width: 0.15, height: 0.34, length: 0.16, chamferRadius: 0.03); leg.materials = [fur]
-                    let legNode = SCNNode(geometry: leg); legNode.position = SCNVector3(side * 0.22, 0.16, legZ * 0.27)
-                    container.addChildNode(legNode)
-                }
-            }
-        case .villager:
-            let robe = SCNBox(width: 0.52, height: 0.82, length: 0.34, chamferRadius: 0.02)
-            let m = SCNMaterial(); m.diffuse.contents = UIColor(red: 0.48, green: 0.28, blue: 0.14, alpha: 1.0); robe.materials = [m]
-            let rn = SCNNode(geometry: robe); rn.position = SCNVector3(0, 0.42, 0)
-            let head = SCNBox(width: 0.44, height: 0.48, length: 0.44, chamferRadius: 0.02)
-            let hm = SCNMaterial(); hm.diffuse.contents = UIColor(red: 0.88, green: 0.68, blue: 0.52, alpha: 1.0); head.materials = [hm]
-            let hn = SCNNode(geometry: head); hn.position = SCNVector3(0, 1.06, 0)
-            container.addChildNode(rn); container.addChildNode(hn)
-        case .slime:
-            let cube = SCNBox(width: 0.75, height: 0.75, length: 0.75, chamferRadius: 0.02)
-            let m = SCNMaterial(); m.diffuse.contents = UIColor(red: 0.34, green: 0.78, blue: 0.32, alpha: 0.88); m.isDoubleSided = true; cube.materials = [m]
-            let cn = SCNNode(geometry: cube); cn.position = SCNVector3(0, 0.38, 0)
-            container.addChildNode(cn)
-        case .zombie:
-            let torso = SCNBox(width: 0.48, height: 0.72, length: 0.26, chamferRadius: 0.02)
-            let tm = SCNMaterial(); tm.diffuse.contents = UIColor(red: 0.16, green: 0.52, blue: 0.68, alpha: 1.0); torso.materials = [tm]
-            let tn = SCNNode(geometry: torso); tn.position = SCNVector3(0, 0.68, 0)
-            let head = SCNBox(width: 0.44, height: 0.44, length: 0.44, chamferRadius: 0.02)
-            let hm = SCNMaterial(); hm.diffuse.contents = UIColor(red: 0.32, green: 0.64, blue: 0.30, alpha: 1.0); head.materials = [hm]
-            let hn = SCNNode(geometry: head); hn.position = SCNVector3(0, 1.26, 0)
-            container.addChildNode(tn); container.addChildNode(hn)
-        case .skeleton:
-            let rib = SCNBox(width: 0.44, height: 0.68, length: 0.24, chamferRadius: 0.02)
-            let bm = SCNMaterial(); bm.diffuse.contents = UIColor(red: 0.90, green: 0.90, blue: 0.86, alpha: 1.0); rib.materials = [bm]
-            let rn = SCNNode(geometry: rib); rn.position = SCNVector3(0, 0.66, 0)
-            let skull = SCNBox(width: 0.42, height: 0.42, length: 0.42, chamferRadius: 0.02); skull.materials = [bm]
-            let sn = SCNNode(geometry: skull); sn.position = SCNVector3(0, 1.22, 0)
-            container.addChildNode(rn); container.addChildNode(sn)
-        case .creeper:
-            let body = SCNBox(width: 0.46, height: 1.15, length: 0.34, chamferRadius: 0.02)
-            let cm = SCNMaterial(); cm.diffuse.contents = UIColor(red: 0.22, green: 0.66, blue: 0.22, alpha: 1.0); body.materials = [cm]
-            let bn = SCNNode(geometry: body); bn.position = SCNVector3(0, 0.58, 0)
-            let head = SCNBox(width: 0.44, height: 0.44, length: 0.44, chamferRadius: 0.02); head.materials = [cm]
-            let hn = SCNNode(geometry: head); hn.position = SCNVector3(0, 1.36, 0)
-            container.addChildNode(bn); container.addChildNode(hn)
-        case .enderman:
-            let tall = SCNBox(width: 0.40, height: 1.55, length: 0.26, chamferRadius: 0.02)
-            let vm = SCNMaterial(); vm.diffuse.contents = UIColor(red: 0.08, green: 0.07, blue: 0.10, alpha: 1.0); tall.materials = [vm]
-            let tn = SCNNode(geometry: tall); tn.position = SCNVector3(0, 0.78, 0)
-            let eye = SCNBox(width: 0.26, height: 0.07, length: 0.06, chamferRadius: 0.0)
-            let em = SCNMaterial(); em.diffuse.contents = UIColor(red: 0.88, green: 0.36, blue: 1.0, alpha: 1.0); em.emission.contents = UIColor(red: 0.78, green: 0.24, blue: 1.0, alpha: 0.8); eye.materials = [em]
-            let en = SCNNode(geometry: eye); en.position = SCNVector3(0, 1.48, -0.14)
-            container.addChildNode(tn); container.addChildNode(en)
-        case .spider:
-            let dark = SCNMaterial(); dark.diffuse.contents = UIColor(red: 0.12, green: 0.10, blue: 0.12, alpha: 1)
-            let body = SCNBox(width: 0.72, height: 0.34, length: 0.92, chamferRadius: 0.08); body.materials = [dark]
-            let bodyNode = SCNNode(geometry: body); bodyNode.position = SCNVector3(0, 0.42, 0)
-            let head = SCNBox(width: 0.42, height: 0.34, length: 0.40, chamferRadius: 0.04); head.materials = [dark]
-            let headNode = SCNNode(geometry: head); headNode.position = SCNVector3(0, 0.46, -0.52)
-            let eyeMat = SCNMaterial(); eyeMat.diffuse.contents = UIColor.red; eyeMat.emission.contents = UIColor.red
-            for side: Float in [-1, 1] {
-                let eye = SCNBox(width: 0.08, height: 0.07, length: 0.04); eye.materials = [eyeMat]
-                let eyeNode = SCNNode(geometry: eye); eyeNode.position = SCNVector3(side * 0.12, 0.50, -0.73); container.addChildNode(eyeNode)
-                for legIndex in 0..<4 {
-                    let leg = SCNBox(width: 0.08, height: 0.08, length: 0.72); leg.materials = [dark]
-                    let legNode = SCNNode(geometry: leg)
-                    legNode.position = SCNVector3(side * (0.36 + Float(legIndex) * 0.015), 0.30, Float(legIndex - 1) * 0.25)
-                    legNode.eulerAngles.y = side * (0.55 + Float(legIndex) * 0.12)
-                    container.addChildNode(legNode)
-                }
-            }
-            container.addChildNode(bodyNode); container.addChildNode(headNode)
-        case .blaze:
-            let gold = SCNMaterial(); gold.diffuse.contents = UIColor(red: 0.98, green: 0.66, blue: 0.12, alpha: 1); gold.emission.contents = UIColor(red: 0.9, green: 0.38, blue: 0.05, alpha: 0.45)
-            let core = SCNBox(width: 0.48, height: 0.82, length: 0.48, chamferRadius: 0.04); core.materials = [gold]
-            let coreNode = SCNNode(geometry: core); coreNode.position = SCNVector3(0, 0.82, 0); container.addChildNode(coreNode)
-            for ring in 0..<3 {
-                for segment in 0..<4 {
-                    let rod = SCNBox(width: 0.12, height: 0.52, length: 0.12, chamferRadius: 0.02); rod.materials = [gold]
-                    let angle = Float(segment) * (.pi / 2) + Float(ring) * 0.45
-                    let node = SCNNode(geometry: rod)
-                    node.position = SCNVector3(cos(angle) * (0.48 + Float(ring) * 0.06), 0.42 + Float(ring) * 0.38, sin(angle) * (0.48 + Float(ring) * 0.06))
-                    container.addChildNode(node)
-                }
-            }
-        case .ironGolem:
-            let iron = SCNMaterial(); iron.diffuse.contents = UIColor(red: 0.72, green: 0.76, blue: 0.70, alpha: 1.0)
-            let body = SCNBox(width: 0.82, height: 1.05, length: 0.48, chamferRadius: 0.04); body.materials = [iron]
-            let bodyNode = SCNNode(geometry: body); bodyNode.position = SCNVector3(0, 0.88, 0)
-            let head = SCNBox(width: 0.62, height: 0.58, length: 0.56, chamferRadius: 0.03); head.materials = [iron]
-            let headNode = SCNNode(geometry: head); headNode.position = SCNVector3(0, 1.72, -0.02)
-            let arm = SCNBox(width: 0.24, height: 1.10, length: 0.30, chamferRadius: 0.03); arm.materials = [iron]
-            let leftArm = SCNNode(geometry: arm); leftArm.position = SCNVector3(-0.58, 0.78, 0)
-            let rightArm = SCNNode(geometry: arm); rightArm.position = SCNVector3(0.58, 0.78, 0)
-            let vine = SCNMaterial(); vine.diffuse.contents = UIColor(red: 0.25, green: 0.48, blue: 0.22, alpha: 1.0)
-            let nose = SCNBox(width: 0.10, height: 0.28, length: 0.12, chamferRadius: 0.01); nose.materials = [vine]
-            let noseNode = SCNNode(geometry: nose); noseNode.position = SCNVector3(0, 1.68, -0.32)
-            container.addChildNode(bodyNode); container.addChildNode(headNode); container.addChildNode(leftArm); container.addChildNode(rightArm); container.addChildNode(noseNode)
-        case .enderDragon:
-            let torso = SCNBox(width: 1.1, height: 0.9, length: 1.8, chamferRadius: 0.04)
-            let dm = SCNMaterial(); dm.diffuse.contents = UIColor(red: 0.14, green: 0.12, blue: 0.18, alpha: 1.0); torso.materials = [dm]
-            let tn = SCNNode(geometry: torso); tn.position = SCNVector3(0, 1.6, 0)
-            let wingL = SCNBox(width: 1.6, height: 0.14, length: 0.8, chamferRadius: 0.02); wingL.materials = [dm]
-            let wln = SCNNode(geometry: wingL); wln.position = SCNVector3(-1.3, 1.85, 0)
-            let wingR = SCNBox(width: 1.6, height: 0.14, length: 0.8, chamferRadius: 0.02); wingR.materials = [dm]
-            let wrn = SCNNode(geometry: wingR); wrn.position = SCNVector3(1.3, 1.85, 0)
-            container.addChildNode(tn); container.addChildNode(wln); container.addChildNode(wrn)
-        }
-        return container
-    }
-
-    private func spawnArrow(from origin: SIMD3<Float>, toward target: SIMD3<Float>, fiery: Bool = false) {
-        let geom = SCNBox(width: fiery ? 0.16 : 0.06, height: fiery ? 0.16 : 0.06, length: fiery ? 0.32 : 0.45, chamferRadius: 0.0)
-        let mat = SCNMaterial()
-        mat.diffuse.contents = fiery ? UIColor.orange : UIColor.white
-        if fiery { mat.emission.contents = UIColor(red: 1.0, green: 0.24, blue: 0.02, alpha: 0.9) }
-        geom.materials = [mat]
-        let node = SCNNode(geometry: geom)
-        node.position = SCNVector3(origin.x, origin.y, origin.z)
-        let dir = simd_normalize(target - origin)
-        node.look(at: SCNVector3(origin.x + dir.x, origin.y + dir.y, origin.z + dir.z))
-        projectilesRootNode.addChildNode(node)
-        arrows.append(ArrowProjectile(position: origin, velocity: dir * (fiery ? 9.0 : 11.5), damage: fiery ? 4 : 3, node: node))
-        SoundEngine.shared.play(.arrow)
-    }
-
-    private func spawnDroppedItem(type: BlockType, at coord: BlockCoord) {
-        let cube = SCNBox(width: 0.28, height: 0.28, length: 0.28, chamferRadius: 0.02)
-        let mat = SCNMaterial()
-        mat.diffuse.contents = type.previewImage
-        mat.diffuse.magnificationFilter = .nearest
-        cube.materials = [mat]
-        let node = SCNNode(geometry: cube)
-        let pos = SIMD3<Float>(Float(coord.x) + 0.5, Float(coord.y) + 0.35, Float(coord.z) + 0.5)
-        node.position = SCNVector3(pos.x, pos.y, pos.z)
-        dropsRootNode.addChildNode(node)
-        droppedItems.append(DroppedItemEntity(blockType: type, position: pos, bobPhase: Float.random(in: 0...6.28), node: node))
-    }
-
-    private func hasNearbyEndCrystal(around pos: SIMD3<Float>) -> Bool {
-        let center = BlockCoord(x: Int(floor(pos.x)), y: Int(floor(pos.y)), z: Int(floor(pos.z)))
-        for dx in -6...6 {
-            for dy in -4...6 {
-                for dz in -6...6 {
-                    if blocks[BlockCoord(x: center.x + dx, y: center.y + dy, z: center.z + dz)] == .endCrystal {
-                        return true
-                    }
-                }
-            }
+        let activeTarget = mob.navigationPath.first ?? target
+        let activeDelta = activeTarget - mob.position
+        let activeFlat = SIMD2<Float>(activeDelta.x, activeDelta.z)
+        let activeDist = simd_length(activeFlat)
+        if activeDist > 0.05 {
+            let dir = activeFlat / activeDist
+            mob.position.x += dir.x * speed * dt
+            mob.position.z += dir.y * speed * dt
+            mob.yaw = atan2(dir.x, dir.y)
         }
         return false
     }
 
-    private func nearestVillager(to position: SIMD3<Float>, within radius: Float) -> WorldMob? {
-        mobs
-            .filter { $0.kind == .villager }
-            .map { ($0, simd_distance(SIMD2<Float>($0.position.x - position.x, $0.position.z - position.z), .zero)) }
-            .filter { $0.1 <= radius }
-            .min { $0.1 < $1.1 }?.0
+    private func makeMobNode(kind: MobKind) -> SCNNode {
+        let root = SCNNode()
+        let bodyGeom: SCNGeometry
+        let bodyColor: UIColor
+
+        switch kind {
+        case .sheep: bodyGeom = SCNBox(width: 0.72, height: 0.56, length: 0.92, chamferRadius: 0.02); bodyColor = UIColor(red: 0.94, green: 0.94, blue: 0.96, alpha: 1.0)
+        case .pig: bodyGeom = SCNBox(width: 0.68, height: 0.52, length: 0.88, chamferRadius: 0.02); bodyColor = UIColor(red: 0.95, green: 0.62, blue: 0.68, alpha: 1.0)
+        case .cow: bodyGeom = SCNBox(width: 0.82, height: 0.74, length: 1.08, chamferRadius: 0.02); bodyColor = UIColor(red: 0.34, green: 0.21, blue: 0.12, alpha: 1.0)
+        case .chicken: bodyGeom = SCNBox(width: 0.42, height: 0.44, length: 0.48, chamferRadius: 0.02); bodyColor = UIColor(red: 0.98, green: 0.98, blue: 0.98, alpha: 1.0)
+        case .fox: bodyGeom = SCNBox(width: 0.54, height: 0.46, length: 0.78, chamferRadius: 0.02); bodyColor = UIColor(red: 0.92, green: 0.44, blue: 0.14, alpha: 1.0)
+        case .bear: bodyGeom = SCNBox(width: 0.94, height: 0.88, length: 1.18, chamferRadius: 0.03); bodyColor = UIColor(red: 0.42, green: 0.26, blue: 0.14, alpha: 1.0)
+        case .fish: bodyGeom = SCNBox(width: 0.22, height: 0.26, length: 0.52, chamferRadius: 0.02); bodyColor = UIColor(red: 0.28, green: 0.72, blue: 0.92, alpha: 1.0)
+        case .dolphin: bodyGeom = SCNBox(width: 0.46, height: 0.44, length: 1.15, chamferRadius: 0.05); bodyColor = UIColor(red: 0.46, green: 0.66, blue: 0.86, alpha: 1.0)
+        case .turtle: bodyGeom = SCNBox(width: 0.72, height: 0.28, length: 0.86, chamferRadius: 0.04); bodyColor = UIColor(red: 0.22, green: 0.64, blue: 0.36, alpha: 1.0)
+        case .guardian: bodyGeom = SCNBox(width: 0.78, height: 0.78, length: 0.78, chamferRadius: 0.02); bodyColor = UIColor(red: 0.22, green: 0.68, blue: 0.64, alpha: 1.0)
+        case .villager: bodyGeom = SCNBox(width: 0.52, height: 0.92, length: 0.34, chamferRadius: 0.02); bodyColor = UIColor(red: 0.42, green: 0.24, blue: 0.14, alpha: 1.0)
+        case .ironGolem: bodyGeom = SCNBox(width: 1.15, height: 1.75, length: 0.78, chamferRadius: 0.02); bodyColor = UIColor(red: 0.82, green: 0.84, blue: 0.88, alpha: 1.0)
+        case .slime: bodyGeom = SCNBox(width: 0.66, height: 0.66, length: 0.66, chamferRadius: 0.02); bodyColor = UIColor(red: 0.36, green: 0.84, blue: 0.32, alpha: 0.85)
+        case .zombie: bodyGeom = SCNBox(width: 0.54, height: 1.25, length: 0.34, chamferRadius: 0.02); bodyColor = UIColor(red: 0.28, green: 0.62, blue: 0.32, alpha: 1.0)
+        case .skeleton: bodyGeom = SCNBox(width: 0.46, height: 1.25, length: 0.30, chamferRadius: 0.02); bodyColor = UIColor(red: 0.86, green: 0.86, blue: 0.82, alpha: 1.0)
+        case .creeper: bodyGeom = SCNBox(width: 0.52, height: 1.18, length: 0.36, chamferRadius: 0.02); bodyColor = UIColor(red: 0.22, green: 0.72, blue: 0.24, alpha: 1.0)
+        case .enderman: bodyGeom = SCNBox(width: 0.44, height: 1.65, length: 0.30, chamferRadius: 0.02); bodyColor = UIColor(red: 0.12, green: 0.08, blue: 0.16, alpha: 1.0)
+        case .enderDragon: bodyGeom = SCNBox(width: 2.2, height: 1.1, length: 2.8, chamferRadius: 0.05); bodyColor = UIColor(red: 0.24, green: 0.08, blue: 0.36, alpha: 1.0)
+        case .spider: bodyGeom = SCNBox(width: 0.92, height: 0.42, length: 1.02, chamferRadius: 0.02); bodyColor = UIColor(red: 0.22, green: 0.17, blue: 0.15, alpha: 1.0)
+        case .blaze: bodyGeom = SCNBox(width: 0.56, height: 1.18, length: 0.56, chamferRadius: 0.02); bodyColor = UIColor(red: 0.98, green: 0.62, blue: 0.12, alpha: 1.0)
+        }
+
+        let bodyMat = SCNMaterial()
+        bodyMat.diffuse.contents = bodyColor
+        if kind == .blaze { bodyMat.emission.contents = UIColor(red: 0.95, green: 0.45, blue: 0.05, alpha: 0.65) }
+        bodyGeom.materials = [bodyMat]
+        let bodyNode = SCNNode(geometry: bodyGeom)
+        bodyNode.position = SCNVector3(0, 0.35, 0)
+        root.addChildNode(bodyNode)
+
+        if kind == .enderDragon {
+            let wingMat = SCNMaterial(); wingMat.diffuse.contents = UIColor(red: 0.68, green: 0.24, blue: 0.96, alpha: 0.9)
+            let leftWing = SCNNode(geometry: SCNBox(width: 2.4, height: 0.12, length: 1.3, chamferRadius: 0.02))
+            leftWing.geometry?.materials = [wingMat]; leftWing.position = SCNVector3(-2.1, 0.55, 0)
+            let rightWing = SCNNode(geometry: SCNBox(width: 2.4, height: 0.12, length: 1.3, chamferRadius: 0.02))
+            rightWing.geometry?.materials = [wingMat]; rightWing.position = SCNVector3(2.1, 0.55, 0)
+            root.addChildNode(leftWing); root.addChildNode(rightWing)
+        }
+
+        let headGeom = SCNBox(width: 0.40, height: 0.40, length: 0.40, chamferRadius: 0.02)
+        let headMat = SCNMaterial()
+        headMat.diffuse.contents = (kind == .villager) ? UIColor(red: 0.92, green: 0.72, blue: 0.56, alpha: 1.0) : bodyColor
+        headGeom.materials = [headMat]
+        let headNode = SCNNode(geometry: headGeom)
+        headNode.position = SCNVector3(0, 0.85, 0.35)
+        root.addChildNode(headNode)
+
+        if kind == .villager {
+            let nose = SCNNode(geometry: SCNBox(width: 0.10, height: 0.16, length: 0.12, chamferRadius: 0.01))
+            nose.geometry?.materials = [headMat]
+            nose.position = SCNVector3(0, 0.82, 0.58)
+            root.addChildNode(nose)
+        }
+
+        if [.zombie, .skeleton, .creeper, .enderman, .enderDragon, .spider, .blaze].contains(kind) {
+            let eyeGeom = SCNBox(width: 0.10, height: 0.08, length: 0.05, chamferRadius: 0.0)
+            let eyeMat = SCNMaterial()
+            eyeMat.diffuse.contents = (kind == .enderman || kind == .enderDragon) ? UIColor.magenta : (kind == .spider ? UIColor.red : UIColor.yellow)
+            eyeMat.emission.contents = eyeMat.diffuse.contents
+            eyeGeom.materials = [eyeMat]
+            let leftEye = SCNNode(geometry: eyeGeom); leftEye.position = SCNVector3(-0.10, 0.88, 0.56)
+            let rightEye = SCNNode(geometry: eyeGeom); rightEye.position = SCNVector3(0.10, 0.88, 0.56)
+            root.addChildNode(leftEye); root.addChildNode(rightEye)
+        }
+
+        return root
     }
 
-    private func nearbyHostile(to villager: WorldMob, within radius: Float) -> WorldMob? {
-        mobs
-            .filter { [.zombie, .skeleton, .creeper, .enderman, .spider, .blaze].contains($0.kind) }
-            .map { ($0, simd_distance(SIMD2<Float>($0.position.x - villager.position.x, $0.position.z - villager.position.z), .zero)) }
-            .filter { $0.1 <= radius }
-            .min { $0.1 < $1.1 }?.0
+    private func spawnArrow(from origin: SIMD3<Float>, target: SIMD3<Float>, damage: Int = 3, color: UIColor = UIColor.white) {
+        let dir = simd_normalize(target - origin)
+        let geom = SCNBox(width: 0.08, height: 0.08, length: 0.52, chamferRadius: 0.0)
+        let mat = SCNMaterial(); mat.diffuse.contents = color; mat.emission.contents = color
+        geom.materials = [mat]
+        let node = SCNNode(geometry: geom)
+        node.position = SCNVector3(origin.x, origin.y, origin.z)
+        node.look(at: SCNVector3(origin.x + dir.x, origin.y + dir.y, origin.z + dir.z))
+        projectilesRootNode.addChildNode(node)
+        arrows.append(ArrowProjectile(position: origin, velocity: dir * 13.0, damage: damage, node: node))
+        SoundEngine.shared.play(.arrow)
     }
 
-    private func ensureVillageGuardian() {
-        let villagers = mobs.filter { $0.kind == .villager && !$0.isBaby }
-        guard villagers.count >= 3 else { return }
-        let center = villagers.reduce(SIMD3<Float>.zero) { $0 + $1.position } / Float(villagers.count)
-        let hasGuardian = mobs.contains { $0.kind == .ironGolem && simd_distance($0.position, center) < 28.0 }
-        guard !hasGuardian else { return }
-        let gx = Int(floor(center.x + 2.0)), gz = Int(floor(center.z + 2.0))
-        let gy = highestSolidY(atX: gx, z: gz)
-        let pos = SIMD3<Float>(Float(gx) + 0.5, Float(gy) + 1.0, Float(gz) + 0.5)
-        let node = makeMobNode(kind: .ironGolem)
-        node.position = SCNVector3(pos.x, pos.y, pos.z)
-        node.name = "mob_iron_golem_\(UUID().uuidString)"
-        mobsRootNode.addChildNode(node)
-        mobs.append(WorldMob(kind: .ironGolem, position: pos, yaw: 0, hp: 80, wanderTimer: 1.0, node: node))
-        unlockAchievement("village_guardian")
-        statusMessage = "An Iron Golem has joined the village"
+    private func spawnDroppedItem(blockType: BlockType, at worldPos: SIMD3<Float>) {
+        let geom = SCNBox(width: 0.28, height: 0.28, length: 0.28, chamferRadius: 0.01)
+        if let shared = sharedGeometries[blockType] { geom.materials = shared.materials }
+        let node = SCNNode(geometry: geom)
+        node.position = SCNVector3(worldPos.x, worldPos.y + 0.2, worldPos.z)
+        dropsRootNode.addChildNode(node)
+        droppedItems.append(DroppedItemEntity(blockType: blockType, position: SIMD3<Float>(worldPos.x, worldPos.y + 0.2, worldPos.z), bobPhase: Float.random(in: 0...6.28), node: node))
     }
 
-    private func updateMobsArrowsAndDrops(dt: Float) {
-        ensureVillageGuardian()
-        let playerGround = SIMD3<Float>(playerPos.x, playerPos.y - 1.0, playerPos.z)
-        var defeatedVillagerIDs: [UUID] = []
+    private func spawnParticles(at worldPos: SIMD3<Float>, color: UIColor, count: Int = 6) {
+        for _ in 0..<count {
+            let geom = SCNBox(width: 0.11, height: 0.11, length: 0.11, chamferRadius: 0.0)
+            let mat = SCNMaterial()
+            mat.diffuse.contents = color
+            mat.emission.contents = color.withAlphaComponent(0.3)
+            geom.materials = [mat]
+            let pNode = SCNNode(geometry: geom)
+            pNode.position = SCNVector3(worldPos.x + Float.random(in: -0.25...0.25), worldPos.y + Float.random(in: -0.15...0.25), worldPos.z + Float.random(in: -0.25...0.25))
+            scene.rootNode.addChildNode(pNode)
 
-        for mob in mobs {
-            mob.wanderTimer -= dt
-            mob.attackCooldown = max(0, mob.attackCooldown - dt)
-            if mob.isElderGuardian && mob.hp > 0 && simd_distance(mob.position, playerPos) < 18 {
-                miningFatigueRemaining = max(miningFatigueRemaining, 0.35)
-            }
-            mob.loveTimer = max(0, mob.loveTimer - dt)
-            mob.breedCooldown = max(0, mob.breedCooldown - dt)
-            if mob.isBaby {
-                mob.ageTimer = max(0, mob.ageTimer - dt)
-                let growth = 0.55 + 0.45 * (1.0 - mob.ageTimer / 120.0)
-                mob.node.scale = SCNVector3(growth, growth, growth)
-                if mob.ageTimer <= 0 { mob.isBaby = false }
-            }
-            mob.knockback *= max(0, 1.0 - dt * 8.0)
-
-            let hostile = ([.zombie, .skeleton, .creeper, .enderman, .enderDragon, .spider, .blaze, .guardian].contains(mob.kind))
-            if mob.kind == .guardian {
-                let distance = simd_distance(mob.position, playerPos)
-                let attackRange: Float = mob.isElderGuardian ? 22.0 : 12.0
-                if distance < attackRange {
-                    let delta = playerPos - mob.position
-                    mob.yaw = atan2(-delta.x, -delta.z)
-                    if mob.attackCooldown <= 0 {
-                        mob.attackCooldown = mob.isElderGuardian ? 2.0 : 3.0
-                        let start = mob.position + SIMD3<Float>(0, 0.1, 0)
-                        let aim = playerPos + SIMD3<Float>(0, -0.25, 0)
-                        DispatchQueue.main.async { self.spawnArrow(from: start, toward: aim, fiery: false) }
-                    }
-                } else if mob.wanderTimer <= 0 {
-                    mob.wanderTimer = Float.random(in: 1.5...3.0)
-                    mob.yaw = Float.random(in: 0...(Float.pi * 2))
-                }
-            } else if mob.isTamed && [.wolf, .fox, .bear].contains(mob.kind) {
-                let distanceToPlayer = simd_length(SIMD2<Float>(playerGround.x - mob.position.x, playerGround.z - mob.position.z))
-                let maximumHP = mob.kind == .bear ? 28 : 12
-
-                // Companions recover slowly while safely travelling with the player.
-                if distanceToPlayer < 10.0 && mob.hp < maximumHP {
-                    mob.petRegenTimer += dt
-                    if mob.petRegenTimer >= 5.0 {
-                        mob.hp = min(maximumHP, mob.hp + 1)
-                        mob.petRegenTimer = 0
-                        if mob.hp >= maximumHP && !unlockedAchievements.contains("well_cared_for") {
-                            DispatchQueue.main.async { self.unlockAchievement("well_cared_for") }
-                        }
-                    }
-                } else {
-                    mob.petRegenTimer = 0
-                }
-
-                // A following companion that falls far behind catches up near the player.
-                if !mob.isSitting && !mob.isGuarding && distanceToPlayer > 20.0 {
-                    let angle = yaw + (mob.id.hashValue % 2 == 0 ? 0.8 : -0.8)
-                    let catchX = playerPos.x - sin(angle) * 1.8
-                    let catchZ = playerPos.z - cos(angle) * 1.8
-                    let ground = Float(highestSolidY(atX: Int(floor(catchX)), z: Int(floor(catchZ)))) + 1.0
-                    mob.position = SIMD3<Float>(catchX, ground, catchZ)
-                    mob.velocityY = 0
-                    mob.node.position = SCNVector3(catchX, ground, catchZ)
-                }
-
-                if mob.isSitting {
-                    mob.velocityY = 0
-                    mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
-                } else {
-                    mob.petGuardMoving = false
-                    let huntRadius: Float = mob.isGuarding ? 10.0 : 7.0
-                    let prey = mobs.filter {
-                        [.zombie, .skeleton, .creeper, .spider, .slime, .enderman, .blaze].contains($0.kind) &&
-                        $0.hp > 0 && simd_distance($0.position, mob.position) < huntRadius
-                    }.min { simd_distance($0.position, mob.position) < simd_distance($1.position, mob.position) }
-                    if let prey {
-                        let delta = prey.position - mob.position
-                        let distance = simd_length(SIMD2<Float>(delta.x, delta.z))
-                        if distance > 1.0 {
-                            mob.yaw = atan2(-delta.x, -delta.z)
-                            mob.petGuardMoving = true
-                        }
-                        if distance < 1.35 && mob.attackCooldown <= 0 {
-                            mob.attackCooldown = mob.kind == .bear ? 1.0 : 1.35
-                            prey.hp -= mob.kind == .bear ? 6 : 4
-                            let pushVector = SIMD2<Float>(delta.x, delta.z)
-                            let pushLength = simd_length(pushVector)
-                            if pushLength > 0.01 { prey.knockback += (pushVector / pushLength) * 2.8 }
-                            if prey.hp <= 0 { prey.node.removeFromParentNode() }
-                        }
-                    } else if !mob.isGuarding {
-                        let dx = playerGround.x - mob.position.x
-                        let dz = playerGround.z - mob.position.z
-                        if hypotf(dx, dz) > 2.2 { mob.yaw = atan2(-dx, -dz) }
-                        else if hypotf(dx, dz) < 1.2 { mob.wanderTimer = max(mob.wanderTimer, 0.4) }
-                    } else if let anchor = mob.guardPosition {
-                        let dx = anchor.x - mob.position.x
-                        let dz = anchor.z - mob.position.z
-                        if hypotf(dx, dz) > 1.0 {
-                            mob.yaw = atan2(-dx, -dz)
-                            mob.petGuardMoving = true
-                        }
-                    }
-                }
-            } else if mob.kind == .ironGolem {
-                if let target = mobs.filter({ [.zombie, .skeleton, .creeper, .enderman].contains($0.kind) })
-                    .map({ ($0, simd_distance(SIMD2<Float>($0.position.x - mob.position.x, $0.position.z - mob.position.z), .zero)) })
-                    .filter({ $0.1 < 16.0 }).min(by: { $0.1 < $1.1 })?.0 {
-                    let delta = target.position - mob.position
-                    let distance = simd_length(SIMD2<Float>(delta.x, delta.z))
-                    if distance > 1.25 { mob.yaw = atan2(-delta.x, -delta.z) }
-                    if distance <= 1.55 && mob.attackCooldown <= 0 {
-                        mob.attackCooldown = 1.15
-                        target.hp -= 7
-                        target.knockback += simd_normalize(SIMD2<Float>(delta.x, delta.z)) * 5.5
-                        if target.hp <= 0 { target.node.removeFromParentNode() }
-                    }
-                }
-            } else if hostile {
-                let raidTarget = isNightMode ? nearestVillager(to: mob.position, within: 12.0) : nil
-                let targetPosition = raidTarget?.position ?? playerGround
-                let toTarget = targetPosition - mob.position
-                let distXZ = simd_length(SIMD2<Float>(toTarget.x, toTarget.z))
-                let chaseRadius: Float = raidTarget == nil ? 14.0 : 12.0
-                if distXZ < chaseRadius && distXZ > 0.2 {
-                    mob.yaw = atan2(-toTarget.x, -toTarget.z)
-                } else if mob.wanderTimer <= 0 {
-                    mob.wanderTimer = Float.random(in: 1.2...2.8)
-                    mob.yaw = Float.random(in: 0...(Float.pi * 2))
-                }
-            } else if mob.kind == .villager {
-                if mob.homePosition == nil || mob.workstationPosition == nil { assignVillagerDestinations(mob) }
-                let scheduledTarget = villagerScheduleTarget(mob)
-                let retreatTarget = isNightMode ? nil : nearbyHostile(to: mob, within: 7.0)
-                let target = retreatTarget.flatMap { _ in mob.homePosition } ?? scheduledTarget
-                if let target = target {
-                    let distance = simd_length(SIMD2<Float>(target.x - mob.position.x,
-                                                            target.z - mob.position.z))
-                    if distance > 0.8 {
-                        updateVillagerNavigation(mob, target: target, dt: dt)
-                    } else {
-                        mob.navigationPath.removeAll()
-                        mob.isSleeping = isNightMode
-                    }
-                    mob.wanderTimer = 0.4
-                } else if mob.wanderTimer <= 0 {
-                    mob.wanderTimer = Float.random(in: 1.2...2.8)
-                    mob.yaw = Float.random(in: 0...(Float.pi * 2))
-                }
-            } else if mob.wanderTimer <= 0 {
-                mob.wanderTimer = Float.random(in: 1.2...2.8)
-                mob.yaw = Float.random(in: 0...(Float.pi * 2))
-            }
-
-            // Creepers pause to prime their fuse at close range, then create a
-            // terrain-affecting blast. Moving away before detonation cancels it.
-            if mob.kind == .creeper {
-                let distanceToPlayer = simd_distance(mob.position, playerGround)
-                if distanceToPlayer < 3.15 {
-                    mob.isCreeperPrimed = true
-                    mob.creeperFuseRemaining -= dt
-                    let pulse = 1.0 + 0.13 * abs(sin(mob.creeperFuseRemaining * 17.0))
-                    mob.node.scale = SCNVector3(pulse, pulse, pulse)
-                    if mob.creeperFuseRemaining <= 0 {
-                        explodeCreeper(mob)
-                        mob.hp = -999
-                    }
-                } else if distanceToPlayer > 4.1 {
-                    mob.isCreeperPrimed = false
-                    mob.creeperFuseRemaining = 1.45
-                    mob.node.scale = SCNVector3(1, 1, 1)
-                }
-            }
-
-            if (mob.kind == .skeleton || mob.kind == .blaze) && mob.attackCooldown <= 0 {
-                let dist = simd_distance(mob.position, playerGround)
-                let range: Float = mob.kind == .blaze ? 15.0 : 13.0
-                if dist < range {
-                    mob.attackCooldown = mob.kind == .blaze ? 2.0 : 2.4
-                    let start = mob.position + SIMD3<Float>(0, mob.kind == .blaze ? 0.9 : 1.2, 0)
-                    let aim = playerPos + SIMD3<Float>(0, -0.3, 0)
-                    DispatchQueue.main.async { self.spawnArrow(from: start, toward: aim, fiery: mob.kind == .blaze) }
-                }
-            }
-
-            if mob.kind == .enderDragon {
-                mob.dragonPhaseTimer -= dt
-                if hasNearbyEndCrystal(around: mob.position) && mob.hp < 28 {
-                    mob.dragonHealTimer += dt
-                    if mob.dragonHealTimer >= 2.0 {
-                        mob.dragonHealTimer = 0
-                        mob.hp = min(28, mob.hp + 1)
-                    }
-                }
-                if mob.attackCooldown <= 0 && simd_distance(mob.position, playerGround) < 19.0 {
-                    mob.attackCooldown = 3.6
-                    let start = mob.position + SIMD3<Float>(0, 1.5, 0)
-                    let aim = playerPos + SIMD3<Float>(0, -0.35, 0)
-                    DispatchQueue.main.async { self.spawnArrow(from: start, toward: aim, fiery: true) }
-                }
-                if mob.dragonPhaseTimer <= 0 {
-                    switch mob.dragonPhase {
-                    case .circling: mob.dragonPhase = .diving; mob.dragonPhaseTimer = 2.5
-                    case .diving: mob.dragonPhase = .perching; mob.dragonPhaseTimer = 3.0
-                    case .perching: mob.dragonPhase = .circling; mob.dragonPhaseTimer = 4.0
-                    }
-                }
-                let speed: Float = (mob.dragonPhase == .diving) ? 4.4 : 2.6
-                let nextX = mob.position.x - sin(mob.yaw) * speed * dt + mob.knockback.x * dt
-                let nextZ = mob.position.z - cos(mob.yaw) * speed * dt + mob.knockback.y * dt
-                let gy = Float(highestSolidY(atX: Int(floor(nextX)), z: Int(floor(nextZ))))
-                let targetY: Float
-                switch mob.dragonPhase {
-                case .circling: targetY = gy + 4.2 + sin(mob.wanderTimer * 2.0) * 0.6
-                case .diving: targetY = gy + 1.4
-                case .perching: targetY = gy + 1.0
-                }
-                mob.position = SIMD3<Float>(nextX, lerp(mob.position.y, targetY, min(1.0, dt * 4.0)), nextZ)
-            } else if [.fish, .dolphin, .turtle, .guardian].contains(mob.kind) {
-                if mob.kind == .dolphin, dolphinGuideAchievementTimer > 0, let target = treasureCompassTarget {
-                    let dx = Float(target.x) + 0.5 - mob.position.x
-                    let dz = Float(target.z) + 0.5 - mob.position.z
-                    if hypotf(dx, dz) > 2.0 { mob.yaw = atan2(-dx, -dz) }
-                }
-                if mob.wanderTimer <= 0 {
-                    mob.wanderTimer = Float.random(in: mob.kind == .turtle ? 2.0...4.0 : 1.0...2.6)
-                    mob.yaw += Float.random(in: mob.kind == .turtle ? -0.65...0.65 : -1.15...1.15)
-                }
-                let swimSpeed: Float = mob.kind == .guardian ? (mob.isElderGuardian ? 1.15 : 0.95) : (mob.kind == .dolphin ? 1.65 : (mob.kind == .turtle ? 0.42 : 0.82))
-                let nx = mob.position.x - sin(mob.yaw) * swimSpeed * dt
-                let nz = mob.position.z - cos(mob.yaw) * swimSpeed * dt
-                let gx = Int(floor(nx)), gz = Int(floor(nz))
-                let currentY = Int(floor(mob.position.y))
-                let waterCell = BlockCoord(x: gx, y: currentY, z: gz)
-                if blocks[waterCell] == .water {
-                    let bob = sin(Float(CACurrentMediaTime()) * (mob.kind == .turtle ? 0.8 : 2.0) + Float(mob.id.hashValue % 100)) * 0.10
-                    let targetY = Float(currentY) + 0.35 + bob
-                    mob.position = SIMD3<Float>(nx, lerp(mob.position.y, targetY, min(1, dt * 2.2)), nz)
-                } else {
-                    mob.yaw += .pi * 0.72
-                }
-            } else {
-                let speed: Float
-                switch mob.kind {
-                case .enderman: speed = 2.4
-                case .spider: speed = 3.0
-                case .blaze: speed = 1.35
-                case .zombie, .skeleton: speed = 2.0
-                case .creeper: speed = mob.isCreeperPrimed ? 0.0 : 2.0
-                case .slime: speed = 1.8
-                case .sheep, .pig, .cow, .chicken: speed = 1.2
-                case .wolf: speed = mob.isTamed ? ((mob.isSitting || (mob.isGuarding && !mob.petGuardMoving)) ? 0.0 : 3.1) : 1.8
-                case .fox: speed = mob.isTamed ? ((mob.isSitting || (mob.isGuarding && !mob.petGuardMoving)) ? 0.0 : 2.8) : 2.0
-                case .bear: speed = mob.isTamed ? ((mob.isSitting || (mob.isGuarding && !mob.petGuardMoving)) ? 0.0 : 2.4) : 1.45
-                case .fish: speed = 0.9
-                case .dolphin: speed = 1.65
-                case .turtle: speed = 0.42
-                case .guardian: speed = 0.95
-                case .villager:
-                    if let target = villagerScheduleTarget(mob), simd_length(SIMD2<Float>(target.x - mob.position.x, target.z - mob.position.z)) <= 0.8 {
-                        speed = 0
-                    } else { speed = mob.isBaby ? 0.9 : 1.2 }
-                case .enderDragon: speed = 2.6
-                case .ironGolem: speed = 2.8
-                }
-
-                let nextX = mob.position.x - sin(mob.yaw) * speed * dt + mob.knockback.x * dt
-                let nextZ = mob.position.z - cos(mob.yaw) * speed * dt + mob.knockback.y * dt
-                let gx = Int(floor(nextX))
-                let gz = Int(floor(nextZ))
-                let curFloorY = Int(floor(mob.position.y - 0.1))
-                let stepBlock = BlockCoord(x: gx, y: curFloorY, z: gz)
-                let headBlock = BlockCoord(x: gx, y: curFloorY + 1, z: gz)
-
-                if let b = blocks[stepBlock], !b.isPassable {
-                    if blocks[headBlock] == nil || blocks[headBlock]?.isPassable == true {
-                        mob.velocityY = max(mob.velocityY, 5.4)
-                    }
-                }
-
-                mob.velocityY -= 15.0 * dt
-                let nextY = mob.position.y + mob.velocityY * dt
-                let groundY = Float(highestSolidY(atX: gx, z: gz)) + 1.0
-                if nextY <= groundY {
-                    mob.position = SIMD3<Float>(nextX, groundY, nextZ)
-                    mob.velocityY = 0
-                } else {
-                    mob.position = SIMD3<Float>(nextX, nextY, nextZ)
-                }
-            }
-
-            mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
-            mob.node.eulerAngles = SCNVector3(mob.isSleeping ? -0.22 : 0, mob.yaw, 0)
-
-            let distToPlayer = simd_distance(mob.position, playerGround)
-            if hostile && mob.kind != .creeper && distToPlayer < 1.45 {
-                hazardTimer += dt
-                if hazardTimer >= 1.1 {
-                    hazardTimer = 0
-                    let rawDmg = mob.kind == .enderDragon ? 4 : 2
-                    DispatchQueue.main.async { self.applyDamage(rawDmg, reason: "\(mob.kind.rawValue) attack") }
-                }
-            }
-
-            if hostile && isNightMode,
-               let villager = nearestVillager(to: mob.position, within: 1.5) {
-                villager.raidDamageCooldown = max(0, villager.raidDamageCooldown - dt)
-                if villager.raidDamageCooldown <= 0 {
-                    villager.raidDamageCooldown = 1.8
-                    villager.hp -= 2
-                    if villager.hp <= 0 {
-                        defeatedVillagerIDs.append(villager.id)
-                    }
-                }
-            }
-        }
-
-        let defeatedHostiles = mobs.filter { [.zombie, .skeleton, .creeper, .enderman, .spider, .blaze, .guardian].contains($0.kind) && $0.hp <= 0 }
-        if !defeatedHostiles.isEmpty {
-            let ids = Set(defeatedHostiles.map(\.id))
-            for mob in defeatedHostiles { mob.node.removeFromParentNode() }
-            mobs.removeAll { ids.contains($0.id) }
-        }
-
-        if !defeatedVillagerIDs.isEmpty {
-            for id in defeatedVillagerIDs {
-                if let index = mobs.firstIndex(where: { $0.id == id && $0.kind == .villager }) {
-                    mobs[index].node.removeFromParentNode()
-                    mobs.remove(at: index)
-                }
-            }
-            DispatchQueue.main.async {
-                self.statusMessage = "A village villager was lost during the night raid"
-                self.saveWorld()
-            }
-        }
-
-        syncBossHUD()
-        var expiredArrows: [Int] = []
-        for idx in arrows.indices {
-            let arrow = arrows[idx]
-            arrow.life -= dt
-            arrow.velocity.y -= 9.8 * dt
-            arrow.position += arrow.velocity * dt
-            arrow.node.position = SCNVector3(arrow.position.x, arrow.position.y, arrow.position.z)
-
-            let hitCoord = BlockCoord(x: Int(floor(arrow.position.x)), y: Int(floor(arrow.position.y)), z: Int(floor(arrow.position.z)))
-            let hitSolid = (blocks[hitCoord] != nil && blocks[hitCoord]?.isPassable == false)
-            let hitPlayer = simd_distance(arrow.position, playerPos - SIMD3<Float>(0, 0.7, 0)) < 0.85
-
-            if hitPlayer {
-                let dmg = arrow.damage
-                let reason = arrow.damage >= 4 ? "Fire projectile" : "Skeleton arrow"
-                DispatchQueue.main.async { self.applyDamage(dmg, reason: reason) }
-                expiredArrows.append(idx)
-            } else if hitSolid || arrow.life <= 0 {
-                expiredArrows.append(idx)
-            }
-        }
-        if !expiredArrows.isEmpty {
-            DispatchQueue.main.async {
-                for idx in expiredArrows.reversed() where idx < self.arrows.count {
-                    self.arrows[idx].node.removeFromParentNode()
-                    self.arrows.remove(at: idx)
-                }
-            }
-        }
-
-        if weather != .clear && activeDimension == .overworld {
-            let fallSpeed: Float = (weather == .rain) ? 11.0 : 3.2
-            for wNode in weatherNodes {
-                var ny = Float(wNode.position.y) - fallSpeed * dt
-                var nx = Float(wNode.position.x) + (weather == .snowstorm ? 1.4 * dt : 0)
-                if ny < 2.0 {
-                    ny = 15.0
-                    nx = playerPos.x + Float.random(in: -12...12)
-                    wNode.position.z = CGFloat(playerPos.z + Float.random(in: -12...12))
-                }
-                wNode.position.x = CGFloat(nx)
-                wNode.position.y = CGFloat(ny)
-            }
-        }
-
-        var collectedIndices: [Int] = []
-        for idx in droppedItems.indices {
-            let item = droppedItems[idx]
-            item.bobPhase += dt * 3.5
-            let bobY = item.position.y + sin(item.bobPhase) * 0.08
-            item.node.position = SCNVector3(item.position.x, bobY, item.position.z)
-            item.node.eulerAngles.y += dt * 2.0
-
-            if simd_distance(item.position, playerGround) < 1.65 {
-                collectedIndices.append(idx)
-            }
-        }
-
-        if !collectedIndices.isEmpty {
-            DispatchQueue.main.async {
-                for idx in collectedIndices.reversed() where self.droppedItems.indices.contains(idx) {
-                    let item = self.droppedItems[idx]
-                    item.node.removeFromParentNode()
-                    self.droppedItems.remove(at: idx)
-                    _ = self.addItems(1, of: item.blockType)
-                    SoundEngine.shared.play(.pickup)
-                    self.statusMessage = "Picked up \(item.blockType.rawValue)"
-                }
-            }
-        }
-
-        var collectedOrbIndices: [Int] = []
-        for idx in experienceOrbs.indices {
-            let orb = experienceOrbs[idx]
-            orb.bobPhase += dt * 4.2
-            let bobY = orb.position.y + sin(orb.bobPhase) * 0.10
-            orb.node.position = SCNVector3(orb.position.x, bobY, orb.position.z)
-            orb.node.eulerAngles.y += dt * 2.8
-            if simd_distance(orb.position, playerGround) < 1.8 { collectedOrbIndices.append(idx) }
-        }
-        if !collectedOrbIndices.isEmpty {
-            DispatchQueue.main.async {
-                for idx in collectedOrbIndices.reversed() where self.experienceOrbs.indices.contains(idx) {
-                    let orb = self.experienceOrbs.remove(at: idx)
-                    orb.node.removeFromParentNode()
-                    self.experiencePoints += orb.value
-                    self.statusMessage = "+\(orb.value) XP • Level \(self.experienceLevel)"
-                    SoundEngine.shared.play(.pickup)
-                    self.saveWorld()
-                }
-            }
+            let dx = CGFloat(Float.random(in: -0.8...0.8))
+            let dy = CGFloat(Float.random(in: 0.35...1.1))
+            let dz = CGFloat(Float.random(in: -0.8...0.8))
+            let action = SCNAction.sequence([
+                .group([.moveBy(x: dx, y: dy, z: dz, duration: 0.35), .fadeOut(duration: 0.35)]),
+                .removeFromParentNode()
+            ])
+            pNode.runAction(action)
         }
     }
 
-    private func explodeCreeper(_ creeper: WorldMob) {
-        let center = creeper.position
-        SoundEngine.shared.play(.explode)
-        let playerDistance = simd_distance(playerPos, center)
-        if playerDistance < 4.25 {
-            let strength = max(0.25, 1.0 - playerDistance / 4.25)
-            let damage = max(1, Int((10.0 * strength).rounded()))
-            applyDamage(damage, reason: "Creeper blast")
-            let away = SIMD2<Float>(playerPos.x - center.x, playerPos.z - center.z)
-            if simd_length(away) > 0.001 {
-                let impulse = simd_normalize(away) * (5.0 * strength)
-                playerPos.x += impulse.x * 0.12
-                playerPos.z += impulse.y * 0.12
-                verticalVelocity = max(verticalVelocity, 2.8 * strength)
-            }
-        }
+    // MARK: - Block Editing, Redstone, Crops & Persistence
 
-        let radius: Float = 2.45
-        let affected = blocks.keys.filter { coord in
-            let dx = Float(coord.x) + 0.5 - center.x
-            let dy = Float(coord.y) + 0.5 - center.y
-            let dz = Float(coord.z) + 0.5 - center.z
-            return dx * dx + dy * dy + dz * dz <= radius * radius
-        }.prefix(90)
-
-        for coord in affected {
-            guard let type = blocks[coord], type != .bedrock, type != .portal else { continue }
-            spawnBreakParticles(at: coord, color: type.particleColor)
-            removeBlockInternal(coord: coord)
-        }
-        statusMessage = "Creeper blast! Nearby terrain was damaged"
-        saveWorld()
-    }
-
-    private func setBlockInternal(coord: BlockCoord, type: BlockType, markModified: Bool = true) {
+    private func setBlockInternal(coord: BlockCoord, type: BlockType, markModified: Bool) {
         blocks[coord] = type
         if markModified { modifiedCoords.insert(coord) }
-        if let existing = blockNodes[coord] {
-            existing.geometry = sharedGeometries[type]
-            existing.position = coord.scnVector
-            existing.renderingOrder = type.isTranslucent ? 10 : 0
-            configureBlockLight(on: existing, for: type)
-        } else {
-            let node = SCNNode(geometry: sharedGeometries[type])
-            node.position = coord.scnVector
-            node.name = "block_\(coord.x)_\(coord.y)_\(coord.z)"
-            node.renderingOrder = type.isTranslucent ? 10 : 0
-            configureBlockLight(on: node, for: type)
-            blocksRootNode.addChildNode(node)
-            blockNodes[coord] = node
-        }
-        let cc = chunkCoord(forWorldX: coord.x, z: coord.z)
-        if loadedChunks.contains(cc) { rebuildMergedChunkNode(cc) }
+        refreshBlockNode(at: coord)
     }
 
-    private func configureBlockLight(on node: SCNNode, for type: BlockType) {
-        node.childNodes.filter { $0.name == "block_light" }.forEach { $0.removeFromParentNode() }
-        if type.emitsLight && type != .redstoneLamp {
-            let lightNode = SCNNode()
-            lightNode.name = "block_light"
-            let light = SCNLight()
-            light.type = .omni
-            light.intensity = (type == .torch || type == .soulTorch) ? 420 : 280
-            light.attenuationStartDistance = 1
-            light.attenuationEndDistance = 8
-            if type == .soulTorch { light.color = UIColor(red: 0.35, green: 0.88, blue: 1.0, alpha: 1.0) }
-            else if type == .endCrystal || type == .portal { light.color = UIColor(red: 0.80, green: 0.44, blue: 1.0, alpha: 1.0) }
-            else if type == .seaLantern { light.color = UIColor(red: 0.72, green: 0.96, blue: 1.0, alpha: 1.0) }
-            else if type == .redstoneDust { light.color = UIColor(red: 1.0, green: 0.18, blue: 0.14, alpha: 1.0) }
-            else { light.color = UIColor(red: 1.0, green: 0.72, blue: 0.28, alpha: 1.0) }
-            lightNode.light = light
-            node.addChildNode(lightNode)
-        }
-    }
-
-    private func removeBlockInternal(coord: BlockCoord) {
+    private func removeBlockInternal(at coord: BlockCoord, markModified: Bool) {
         blocks.removeValue(forKey: coord)
-        modifiedCoords.insert(coord)
+        if markModified { modifiedCoords.insert(coord) }
         openDoors.remove(coord)
         redstoneToggledDoors.remove(coord)
-        openedChests.remove(coord)
-        chestStorage.removeValue(forKey: chestKey(for: coord))
         activeLevers.remove(coord)
         activePressurePlates.remove(coord)
         activeButtons.removeValue(forKey: coord)
         poweredRedstoneLamps.remove(coord)
-        extendedPistons.remove(coord)
         cropStages.removeValue(forKey: coord)
         blockNodes[coord]?.removeFromParentNode()
         blockNodes.removeValue(forKey: coord)
-        let cc = chunkCoord(forWorldX: coord.x, z: coord.z)
-        if loadedChunks.contains(cc) { rebuildMergedChunkNode(cc) }
+    }
+
+    private func refreshBlockNode(at coord: BlockCoord) {
+        blockNodes[coord]?.removeFromParentNode()
+        blockNodes.removeValue(forKey: coord)
+
+        guard let type = blocks[coord] else { return }
+        let dist = simd_distance(SIMD3<Float>(Float(coord.x) + 0.5, Float(coord.y) + 0.5, Float(coord.z) + 0.5), playerPos)
+        guard dist <= maxViewDistance else { return }
+
+        let node = SCNNode(geometry: sharedGeometries[type] ?? type.makeGeometry())
+        node.position = coord.scnVector
+        node.name = "block_\(coord.x)_\(coord.y)_\(coord.z)"
+        if type == .door && openDoors.contains(coord) { node.eulerAngles.y = .pi / 2 }
+        if type == .lever && activeLevers.contains(coord) { node.eulerAngles.z = .pi / 4 }
+        if type == .crop {
+            let st = cropStages[coord] ?? 0
+            node.scale = SCNVector3(1.0, CGFloat(0.45 + Double(st) * 0.22), 1.0)
+        }
+        blocksRootNode.addChildNode(node)
+        blockNodes[coord] = node
     }
 
     private func clearAllBlockNodes() {
@@ -5061,26 +4280,1456 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         blockNodes.removeAll()
     }
 
-    private func spawnBreakParticles(at coord: BlockCoord, color: UIColor) {
-        let center = coord.scnVector
-        for i in 0..<8 {
-            let bitGeom = SCNBox(width: 0.14, height: 0.14, length: 0.14, chamferRadius: 0.0)
-            let mat = SCNMaterial(); mat.diffuse.contents = color; bitGeom.materials = [mat]
-            let bit = SCNNode(geometry: bitGeom); bit.position = center
-            let angle = Float(i) * (Float.pi * 0.25)
-            scene.rootNode.addChildNode(bit)
-            let move = SCNAction.moveBy(x: CGFloat(cos(angle) * 1.4), y: 0.85, z: CGFloat(sin(angle) * 1.4), duration: 0.35)
-            let fade = SCNAction.fadeOut(duration: 0.35)
-            bit.runAction(SCNAction.sequence([.group([move, fade]), .removeFromParentNode()]))
+    func setMovementInput(x: Float, z: Float) { moveInput = SIMD2<Float>(x, z) }
+
+    func setSprint(_ active: Bool) {
+        if active && stamina <= 2 {
+            isSprinting = false
+            return
+        }
+        isSprinting = active
+    }
+
+    func toggleShield() {
+        isShieldRaised.toggle()
+        statusMessage = isShieldRaised ? "Shield raised — incoming damage reduced" : "Shield lowered"
+    }
+
+    func rotateCamera(deltaX: Float, deltaY: Float) {
+        yaw -= deltaX * 0.0055
+        pitch = max(-1.35, min(1.35, pitch - deltaY * 0.0055))
+        updateCameraTransform()
+    }
+
+    func jump() {
+        if isInBoat { return }
+        let feetY = Int(floor(playerPos.y - 1.55))
+        let px = Int(floor(playerPos.x))
+        let pz = Int(floor(playerPos.z))
+        let onGround = hasSolidBlock(atX: px, y: feetY, z: pz) || hasSolidBlock(atX: px, y: feetY, z: pz - 1) || hasSolidBlock(atX: px, y: feetY, z: pz + 1)
+        if onGround || isUnderwater {
+            verticalVelocity = isUnderwater ? 4.8 : 7.4
+            SoundEngine.shared.play(.jump)
+        }
+    }
+
+    func toggleCameraMode() {
+        cameraMode = (cameraMode == .firstPerson) ? .overview : .firstPerson
+        updateCameraTransform()
+        statusMessage = (cameraMode == .overview) ? "Overview camera" : "First-person camera"
+    }
+
+    func setCustomSpawnHere() {
+        let coord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 1.0)), z: Int(floor(playerPos.z)))
+        customSpawnCoord = coord
+        saveWorld()
+        statusMessage = "Respawn set to X:\(coord.x) Y:\(coord.y) Z:\(coord.z)"
+    }
+
+    func respawnPlayer() {
+        if isInBoat {
+            isInBoat = false
+            boatSpeed = 0
+        }
+        if let sp = customSpawnCoord {
+            let gy = max(sp.y, highestSolidY(atX: sp.x, z: sp.z))
+            playerPos = SIMD3<Float>(Float(sp.x) + 0.5, Float(gy) + 2.5, Float(sp.z) + 0.5)
+        } else {
+            let gy = highestSolidY(atX: 0, z: 6)
+            playerPos = SIMD3<Float>(0.5, Float(gy) + 2.5, 6.5)
+        }
+        verticalVelocity = 0.0
+        fallStartY = nil
+        health = 20
+        hunger = 20
+        oxygen = 10
+        stamina = 100
+        isSprinting = false
+        isUnderwater = false
+        drowningTimer = 0
+        oxygenTickTimer = 0
+        staminaRecoveryDelay = 0
+        updateChunksAroundPlayer(force: true)
+        updateCameraTransform()
+    }
+
+    private func triggerExplosion(at center: BlockCoord, radius: Int = 2) {
+        SoundEngine.shared.play(.explode)
+        spawnParticles(at: center.scnVector, color: UIColor.orange, count: 14)
+        for dx in -radius...radius {
+            for dy in -radius...radius {
+                for dz in -radius...radius where dx * dx + dy * dy + dz * dz <= radius * radius + 1 {
+                    let target = BlockCoord(x: center.x + dx, y: center.y + dy, z: center.z + dz)
+                    if target.y > 0 && blocks[target] != .bedrock {
+                        removeBlockInternal(at: target, markModified: true)
+                    }
+                }
+            }
+        }
+        let distToPlayer = simd_distance(center.scnVector.simd, playerPos)
+        if distToPlayer < 4.5 && gameMode == .survival {
+            applyPlayerDamage(6, source: "TNT blast")
+        }
+        saveWorld()
+    }
+
+    private func applyPlayerDamage(_ amount: Int, source: String) {
+        guard gameMode == .survival, health > 0 else { return }
+        if isShieldRaised {
+            statusMessage = "Blocked \(source) with shield"
+            SoundEngine.shared.play(.piston)
+            return
+        }
+        let resistanceActive = (activePotionEffects[.resistance] ?? 0) > 0
+        let resistanceMitigation = resistanceActive ? max(1, (amount + 1) / 2) : 0
+        let reduced = max(1, amount - effectiveArmorReduction - resistanceMitigation)
+        damageArmor()
+        health = max(0, health - reduced)
+        SoundEngine.shared.play(.hurt)
+        statusMessage = "\(source) (-\(reduced) HP)"
+        if health == 0 {
+            statusMessage = "Defeated by \(source) — Respawning"
+            respawnPlayer()
+        }
+    }
+
+    // MARK: - Redstone Propagation & Piston Extension
+
+    private func isCoordPowered(_ coord: BlockCoord) -> Bool {
+        let now = CACurrentMediaTime()
+        for activeButton in activeButtons where now - activeButton.value > 1.2 {
+            activeButtons.removeValue(forKey: activeButton.key)
+            blockNodes[activeButton.key]?.scale = SCNVector3(1.0, 1.0, 1.0)
+        }
+        let neighbors = [
+            BlockCoord(x: coord.x + 1, y: coord.y, z: coord.z),
+            BlockCoord(x: coord.x - 1, y: coord.y, z: coord.z),
+            BlockCoord(x: coord.x, y: coord.y + 1, z: coord.z),
+            BlockCoord(x: coord.x, y: coord.y - 1, z: coord.z),
+            BlockCoord(x: coord.x, y: coord.y, z: coord.z + 1),
+            BlockCoord(x: coord.x, y: coord.y, z: coord.z - 1)
+        ]
+        for n in neighbors {
+            if blocks[n] == .lever && activeLevers.contains(n) { return true }
+            if blocks[n] == .pressurePlate && activePressurePlates.contains(n) { return true }
+            if blocks[n] == .button && activeButtons[n] != nil { return true }
+            if blocks[n] == .redstoneDust { return true }
+        }
+        return false
+    }
+
+    private func propagateRedstone(around origin: BlockCoord) {
+        let candidates = [
+            origin,
+            BlockCoord(x: origin.x + 1, y: origin.y, z: origin.z),
+            BlockCoord(x: origin.x - 1, y: origin.y, z: origin.z),
+            BlockCoord(x: origin.x, y: origin.y + 1, z: origin.z),
+            BlockCoord(x: origin.x, y: origin.y - 1, z: origin.z),
+            BlockCoord(x: origin.x, y: origin.y, z: origin.z + 1),
+            BlockCoord(x: origin.x, y: origin.y, z: origin.z - 1)
+        ]
+
+        for c in candidates {
+            guard let b = blocks[c] else { continue }
+            let powered = isCoordPowered(c)
+
+            if b == .tnt && powered {
+                triggerExplosion(at: c, radius: 2)
+            } else if b == .redstoneLamp {
+                if powered && !poweredRedstoneLamps.contains(c) {
+                    poweredRedstoneLamps.insert(c)
+                    let lit = SCNMaterial()
+                    lit.diffuse.contents = UIColor(red: 1.0, green: 0.85, blue: 0.42, alpha: 1.0)
+                    lit.emission.contents = UIColor(red: 1.0, green: 0.68, blue: 0.18, alpha: 0.92)
+                    blockNodes[c]?.geometry?.materials = [lit, lit, lit, lit, lit, lit]
+                    SoundEngine.shared.play(.piston)
+                } else if !powered && poweredRedstoneLamps.contains(c) {
+                    poweredRedstoneLamps.remove(c)
+                    refreshBlockNode(at: c)
+                }
+            } else if b == .door {
+                if powered && !openDoors.contains(c) {
+                    openDoors.insert(c)
+                    redstoneToggledDoors.insert(c)
+                    blockNodes[c]?.eulerAngles.y = .pi / 2
+                    SoundEngine.shared.play(.piston)
+                } else if !powered && redstoneToggledDoors.contains(c) {
+                    openDoors.remove(c)
+                    redstoneToggledDoors.remove(c)
+                    blockNodes[c]?.eulerAngles.y = 0
+                }
+            } else if b == .piston {
+                let headCoord = BlockCoord(x: c.x, y: c.y + 1, z: c.z)
+                if powered && !extendedPistons.contains(c) && blocks[headCoord] == nil {
+                    extendedPistons.insert(c)
+                    setBlockInternal(coord: headCoord, type: .planks, markModified: true)
+                    SoundEngine.shared.play(.piston)
+                } else if !powered && extendedPistons.contains(c) {
+                    extendedPistons.remove(c)
+                    if blocks[headCoord] == .planks {
+                        removeBlockInternal(at: headCoord, markModified: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func interactWithBlock(at coord: BlockCoord, type: BlockType) -> Bool {
+        if type == .door {
+            if openDoors.contains(coord) {
+                openDoors.remove(coord)
+                redstoneToggledDoors.remove(coord)
+                blockNodes[coord]?.eulerAngles.y = 0
+                statusMessage = "Closed door"
+            } else {
+                openDoors.insert(coord)
+                blockNodes[coord]?.eulerAngles.y = .pi / 2
+                statusMessage = "Opened door"
+            }
+            SoundEngine.shared.play(.piston)
+            saveWorld()
+            return true
+        }
+        if type == .chest {
+            openChest(at: coord)
+            return true
+        }
+        if type == .craftingTable {
+            showCraftSheet = true
+            statusMessage = "Opened Crafting Bench"
+            return true
+        }
+        if type == .furnace {
+            queueFurnaceSmelt()
+            return true
+        }
+        if type == .bed {
+            isNightMode.toggle()
+            health = min(20, health + 6)
+            setCustomSpawnHere()
+            statusMessage = isNightMode ? "Slept until night (+6 HP, spawn set)" : "Slept until morning (+6 HP, spawn set)"
+            SoundEngine.shared.play(.eat)
+            return true
+        }
+        if type == .lever {
+            if activeLevers.contains(coord) {
+                activeLevers.remove(coord)
+                blockNodes[coord]?.eulerAngles.z = 0
+                statusMessage = "Lever OFF"
+            } else {
+                activeLevers.insert(coord)
+                blockNodes[coord]?.eulerAngles.z = .pi / 4
+                statusMessage = "Lever ON"
+            }
+            SoundEngine.shared.play(.piston)
+            propagateRedstone(around: coord)
+            saveWorld()
+            return true
+        }
+        if type == .button {
+            activeButtons[coord] = CACurrentMediaTime()
+            blockNodes[coord]?.scale = SCNVector3(1.0, 0.45, 1.0)
+            SoundEngine.shared.play(.piston)
+            propagateRedstone(around: coord)
+            statusMessage = "Button pressed"
+            return true
+        }
+        if type == .tnt {
+            triggerExplosion(at: coord, radius: 2)
+            return true
+        }
+        if type == .portal {
+            selectDimension(activeDimension.nextDimension)
+            return true
+        }
+        if type == .crop {
+            let st = cropStages[coord] ?? 0
+            if st >= 3 {
+                cropStages[coord] = 0
+                blockNodes[coord]?.scale = SCNVector3(1.0, 0.45, 1.0)
+                foodInventory[.wheat, default: 0] += 2
+                foodInventory[.seeds, default: 0] += 1
+                _ = addItems(2, of: .leaves)
+                SoundEngine.shared.play(.pickup)
+                statusMessage = "Harvested crop (+2 Wheat, +1 Seeds)"
+                saveWorld()
+            } else {
+                cropStages[coord] = st + 1
+                blockNodes[coord]?.scale = SCNVector3(1.0, CGFloat(0.45 + Double(st + 1) * 0.22), 1.0)
+                statusMessage = "Tended crop (stage \(st + 1)/3)"
+            }
+            return true
+        }
+        return false
+    }
+
+    @discardableResult
+    func performPrimaryAction(at point: CGPoint? = nil, in view: SCNView? = nil) -> String {
+        if selectedTool == .fishingRod && activeTool == .breakBlock {
+            let px = Int(floor(playerPos.x)), py = Int(floor(playerPos.y - 1.1)), pz = Int(floor(playerPos.z))
+            let forward = SIMD3<Float>(-sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
+            for step in 1...4 {
+                let sample = playerPos + forward * Float(step)
+                let c = BlockCoord(x: Int(floor(sample.x)), y: Int(floor(sample.y)), z: Int(floor(sample.z)))
+                if blocks[c] == .water { castFishingRod(at: c); return statusMessage }
+            }
+            for dx in -2...2 {
+                for dz in -2...2 {
+                    for dy in -2...0 {
+                        let c = BlockCoord(x: px + dx, y: py + dy, z: pz + dz)
+                        if blocks[c] == .water { castFishingRod(at: c); return statusMessage }
+                    }
+                }
+            }
+            castFishingRod(at: BlockCoord(x: px, y: py, z: pz))
+            return statusMessage
+        }
+
+        if let view, let point {
+            let hits = view.hitTest(point, options: [SCNHitTestOption.searchMode: SCNHitTestSearchMode.closest.rawValue])
+            for hit in hits {
+                if let mob = hitMob(from: hit.node) {
+                    let meleeBonus = selectedTool == .sword ? 2 : 0
+                    let sharpnessBonus = enchantmentLevel(.sharpness) * 2
+                    let strengthBonus = (activePotionEffects[.strength] ?? 0) > 0 ? 4 : 0
+                    let dmg = max(2, equippedGear.attackDamage + selectedTool.attackDamage + meleeBonus + sharpnessBonus + strengthBonus)
+                    let wasHostile = [.zombie, .skeleton, .creeper, .enderman, .enderDragon, .spider, .blaze, .guardian].contains(mob.kind)
+                    mob.hp -= dmg
+                    if gameMode == .survival { damageTool() }
+                    let pushDir = simd_normalize(SIMD2<Float>(mob.position.x - playerPos.x, mob.position.z - playerPos.z) + SIMD2<Float>(0.001, 0.001))
+                    mob.knockback = pushDir * 6.5
+                    SoundEngine.shared.play(.hitMob)
+                    spawnParticles(at: mob.position, color: UIColor.red, count: 6)
+                    if mob.hp <= 0 {
+                        let wasElderGuardian = mob.isElderGuardian
+                        if mob.kind == .enderDragon {
+                            unlockAchievement("dragon_slayer")
+                            awardExperience(35, at: mob.position)
+                        } else if wasElderGuardian {
+                            unlockAchievement("monument_conqueror")
+                            awardExperience(25, at: mob.position)
+                        } else if wasHostile {
+                            defeatedHostileCount += 1
+                            unlockAchievement("first_blood")
+                            if defeatedHostileCount >= 10 { unlockAchievement("monster_hunter") }
+                            awardExperience(4, at: mob.position)
+                        }
+                        if mob.kind == .sheep { foodInventory[.rawMutton, default: 0] += 1; _ = addItems(1, of: .wool) }
+                        else if mob.kind == .pig { foodInventory[.rawPork, default: 0] += 1 }
+                        else if mob.kind == .cow { foodInventory[.rawBeef, default: 0] += 1 }
+                        else if mob.kind == .chicken { foodInventory[.rawChicken, default: 0] += 1; foodInventory[.seeds, default: 0] += 1 }
+                        else if mob.kind == .fish { foodInventory[.rawFish, default: 0] += 1 }
+                        else if mob.kind == .spider { _ = addItems(1, of: .redstoneOre) }
+                        else if mob.kind == .blaze { _ = addItems(1, of: .glowstone) }
+                        else if mob.kind == .enderDragon { _ = addItems(2, of: .endCrystal) }
+                        else if mob.kind == .guardian { _ = addItems(2, of: .prismarine) }
+                        mob.node.removeFromParentNode()
+                        mobs.removeAll { $0.id == mob.id }
+                        if wasElderGuardian || mob.kind == .enderDragon { syncBossHUD() }
+                        statusMessage = "Defeated \(mob.kind.rawValue)"
+                    } else {
+                        if wasElderGuardian || mob.kind == .enderDragon { syncBossHUD() }
+                        statusMessage = "Hit \(mob.kind.rawValue) (-\(dmg) HP)"
+                    }
+                    return statusMessage
+                }
+            }
+        }
+
+        if activeTool == .breakBlock {
+            guard let target = targetedBlock(from: point, in: view), let existing = blocks[target] else {
+                statusMessage = "No block in range to mine"
+                return statusMessage
+            }
+            if existing == .bedrock {
+                statusMessage = "Bedrock cannot be mined"
+                return statusMessage
+            }
+            let dropType: BlockType
+            switch existing {
+            case .grass, .snowGrass: dropType = .dirt
+            case .stone: dropType = .cobblestone
+            default: dropType = existing
+            }
+            removeBlockInternal(at: target, markModified: true)
+            if gameMode == .survival { damageTool() }
+            if [.coalOre, .ironOre, .goldOre, .diamondOre, .emeraldOre, .redstoneOre, .quartzOre].contains(existing) {
+                awardExperience(existing == .diamondOre || existing == .emeraldOre ? 4 : 2, at: target.scnVector.simd)
+            }
+            spawnDroppedItem(blockType: dropType, at: target.scnVector.simd)
+            spawnParticles(at: target.scnVector.simd, color: existing.particleColor, count: 8)
+            placedOrMinedCount += 1
+            SoundEngine.shared.play(.mine)
+            sendBlockDelta(coord: target, type: nil)
+            saveWorld()
+            statusMessage = "Mined \(existing.rawValue)"
+            return statusMessage
+        }
+
+        if let hitBlock = targetedBlock(from: point, in: view), let hitType = blocks[hitBlock] {
+            if interactWithBlock(at: hitBlock, type: hitType) {
+                return statusMessage
+            }
+        }
+
+        guard let placeCoord = placementCoordinate(from: point, in: view) else {
+            statusMessage = "Aim at a surface to place a block"
+            return statusMessage
+        }
+
+        let currentCount = count(for: selectedBlock)
+        if gameMode == .survival && currentCount <= 0 {
+            statusMessage = "Out of \(selectedBlock.rawValue) in Survival"
+            return statusMessage
+        }
+
+        if gameMode == .survival {
+            inventory[selectedBlock] = max(0, currentCount - 1)
+        }
+
+        setBlockInternal(coord: placeCoord, type: selectedBlock, markModified: true)
+        if selectedBlock == .crop { cropStages[placeCoord] = 0 }
+        spawnParticles(at: placeCoord.scnVector.simd, color: selectedBlock.particleColor, count: 6)
+        placedOrMinedCount += 1
+        SoundEngine.shared.play(.place)
+        propagateRedstone(around: placeCoord)
+        checkIronGolemSummon(around: placeCoord)
+        sendBlockDelta(coord: placeCoord, type: selectedBlock)
+        saveWorld()
+        statusMessage = "Placed \(selectedBlock.rawValue)"
+        return statusMessage
+    }
+
+    private func checkIronGolemSummon(around coord: BlockCoord) {
+        guard selectedBlock == .glowstone || selectedBlock == .tnt || selectedBlock == .seaLantern else { return }
+        let below1 = BlockCoord(x: coord.x, y: coord.y - 1, z: coord.z)
+        let below2 = BlockCoord(x: coord.x, y: coord.y - 2, z: coord.z)
+        guard blocks[below1] == .ironOre && blocks[below2] == .ironOre else { return }
+        let armL = BlockCoord(x: coord.x - 1, y: coord.y - 1, z: coord.z)
+        let armR = BlockCoord(x: coord.x + 1, y: coord.y - 1, z: coord.z)
+        guard blocks[armL] == .ironOre && blocks[armR] == .ironOre else { return }
+
+        removeBlockInternal(at: coord, markModified: true)
+        removeBlockInternal(at: below1, markModified: true)
+        removeBlockInternal(at: below2, markModified: true)
+        removeBlockInternal(at: armL, markModified: true)
+        removeBlockInternal(at: armR, markModified: true)
+
+        let pos = SIMD3<Float>(Float(below2.x) + 0.5, Float(below2.y) + 1.0, Float(below2.z) + 0.5)
+        let node = makeMobNode(kind: .ironGolem)
+        node.position = SCNVector3(pos.x, pos.y, pos.z)
+        let golem = WorldMob(kind: .ironGolem, position: pos, yaw: 0, hp: 80, wanderTimer: 1.5, node: node)
+        node.name = "mob_\(golem.id.uuidString)"
+        mobsRootNode.addChildNode(node)
+        mobs.append(golem)
+        unlockAchievement("village_guardian")
+        SoundEngine.shared.play(.piston)
+        statusMessage = "Summoned Iron Golem!"
+    }
+
+    func handleWorldTap(at point: CGPoint, in view: SCNView) {
+        if let hitMob = tappedMob(at: point, in: view) {
+            if hitMob.kind == .villager {
+                let dist = simd_length(SIMD2<Float>(hitMob.position.x - playerPos.x, hitMob.position.z - playerPos.z))
+                if dist <= 6.0 {
+                    activeVillagerID = hitMob.id
+                    showVillagerTradeSheet = true
+                    statusMessage = "Trading with \(hitMob.profession.rawValue) Villager"
+                } else {
+                    statusMessage = "Move closer to trade with the Villager"
+                }
+                return
+            }
+            if [.wolf, .fox, .bear].contains(hitMob.kind) {
+                if hitMob.isTamed {
+                    if hitMob.hp < 12 {
+                        let healFood: FoodKind = hitMob.kind == .wolf ? .cookedBeef : (hitMob.kind == .fox ? .rawFish : .cookedMutton)
+                        if foodCount(for: healFood) > 0 {
+                            foodInventory[healFood, default: 0] -= 1
+                            hitMob.hp = 12
+                            unlockAchievement("well_cared_for")
+                            statusMessage = "Restored \(hitMob.kind.rawValue) to full health"
+                            SoundEngine.shared.play(.eat)
+                            saveWorld()
+                            return
+                        }
+                    }
+                    if !hitMob.isSitting && !hitMob.isGuarding {
+                        hitMob.isSitting = true; hitMob.isGuarding = false; hitMob.guardPosition = nil
+                        statusMessage = "\(hitMob.kind.rawValue) is sitting"
+                    } else if hitMob.isSitting {
+                        hitMob.isSitting = false; hitMob.isGuarding = true; hitMob.guardPosition = hitMob.position
+                        unlockAchievement("watchful_companion")
+                        statusMessage = "\(hitMob.kind.rawValue) is guarding this spot"
+                    } else {
+                        hitMob.isSitting = false; hitMob.isGuarding = false; hitMob.guardPosition = nil
+                        statusMessage = "\(hitMob.kind.rawValue) is following you"
+                    }
+                    SoundEngine.shared.play(.pickup)
+                    saveWorld()
+                    return
+                }
+                if tameCompanion(hitMob) { return }
+            }
+            if [.sheep, .pig, .cow, .chicken, .wolf, .fox, .bear, .fish, .dolphin, .turtle].contains(hitMob.kind), feedAnimal(hitMob) {
+                return
+            }
+        }
+        _ = performPrimaryAction(at: point, in: view)
+    }
+
+    private func tappedMob(at point: CGPoint, in view: SCNView) -> WorldMob? {
+        let hits = view.hitTest(point, options: [SCNHitTestOption.searchMode: SCNHitTestSearchMode.closest.rawValue])
+        for hit in hits {
+            if let mob = hitMob(from: hit.node) { return mob }
+        }
+        return nil
+    }
+
+    private func hitMob(from node: SCNNode) -> WorldMob? {
+        var cur: SCNNode? = node
+        while let n = cur {
+            if let name = n.name, name.hasPrefix("mob_"), let uuid = UUID(uuidString: String(name.dropFirst(4))) {
+                return mobs.first(where: { $0.id == uuid })
+            }
+            cur = n.parent
+        }
+        return nil
+    }
+
+    private func targetedBlock(from point: CGPoint?, in view: SCNView?) -> BlockCoord? {
+        if let view, let point {
+            let hits = view.hitTest(point, options: [SCNHitTestOption.searchMode: SCNHitTestSearchMode.closest.rawValue])
+            for hit in hits {
+                if let coord = coordFromNode(hit.node) { return coord }
+            }
+        }
+        let ray = forwardRay()
+        for step in stride(from: Float(1.0), through: Float(5.5), by: Float(0.25)) {
+            let sample = ray.origin + ray.dir * step
+            let c = BlockCoord(x: Int(floor(sample.x)), y: Int(floor(sample.y)), z: Int(floor(sample.z)))
+            if blocks[c] != nil { return c }
+        }
+        return nil
+    }
+
+    private func placementCoordinate(from point: CGPoint?, in view: SCNView?) -> BlockCoord? {
+        if let view, let point {
+            let hits = view.hitTest(point, options: [SCNHitTestOption.searchMode: SCNHitTestSearchMode.closest.rawValue])
+            for hit in hits {
+                if let hitCoord = coordFromNode(hit.node) {
+                    let n = hit.worldNormal
+                    let candidate = BlockCoord(x: hitCoord.x + Int(round(n.x)), y: hitCoord.y + Int(round(n.y)), z: hitCoord.z + Int(round(n.z)))
+                    if candidate.y >= 0 && candidate.y <= 15 && blocks[candidate] == nil && !intersectsPlayer(candidate) {
+                        return candidate
+                    }
+                }
+            }
+        }
+        let ray = forwardRay()
+        var previousEmpty: BlockCoord?
+        for step in stride(from: Float(1.2), through: Float(5.0), by: Float(0.25)) {
+            let sample = ray.origin + ray.dir * step
+            let c = BlockCoord(x: Int(floor(sample.x)), y: Int(floor(sample.y)), z: Int(floor(sample.z)))
+            if blocks[c] != nil {
+                if let prev = previousEmpty, prev.y >= 0 && prev.y <= 15 && !intersectsPlayer(prev) { return prev }
+                return nil
+            }
+            previousEmpty = c
+        }
+        return nil
+    }
+
+    private func coordFromNode(_ node: SCNNode) -> BlockCoord? {
+        var cur: SCNNode? = node
+        while let n = cur {
+            if let name = n.name, name.hasPrefix("block_") {
+                let parts = name.split(separator: "_")
+                if parts.count == 4, let x = Int(parts[1]), let y = Int(parts[2]), let z = Int(parts[3]) {
+                    return BlockCoord(x: x, y: y, z: z)
+                }
+            }
+            cur = n.parent
+        }
+        return nil
+    }
+
+    private func forwardRay() -> (origin: SIMD3<Float>, dir: SIMD3<Float>) {
+        let dir = SIMD3<Float>(-sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
+        return (playerPos, simd_normalize(dir))
+    }
+
+    private func intersectsPlayer(_ coord: BlockCoord) -> Bool {
+        let bx = Float(coord.x) + 0.5, by = Float(coord.y) + 0.5, bz = Float(coord.z) + 0.5
+        let dx = abs(playerPos.x - bx), dz = abs(playerPos.z - bz)
+        let dyMin = playerPos.y - 1.45, dyMax = playerPos.y + 0.25
+        return dx < 0.72 && dz < 0.72 && (Float(coord.y) + 1.0) > dyMin && Float(coord.y) < dyMax
+    }
+
+    private func hasSolidBlock(atX x: Int, y: Int, z: Int) -> Bool {
+        guard let b = blocks[BlockCoord(x: x, y: y, z: z)] else { return false }
+        return !b.isPassable
+    }
+
+    private func highestSolidY(atX x: Int, z: Int) -> Int {
+        for y in stride(from: 11, through: 0, by: -1) {
+            if let b = blocks[BlockCoord(x: x, y: y, z: z)], !b.isPassable { return y }
+        }
+        return 0
+    }
+
+    // MARK: - Frame Loop, Mobs, Projectiles & LAN Sync
+
+    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        let dt: Float
+        if let last = lastFrameTime { dt = Float(min(0.05, max(0.001, time - last))) } else { dt = 0.016 }
+        lastFrameTime = time
+
+        if isAutoCycleEnabled {
+            dayClockTimer += dt
+            if dayClockTimer >= 45.0 {
+                dayClockTimer = 0.0
+                isNightMode.toggle()
+            }
+        }
+
+        let targetNight: Float = isNightMode ? 1.0 : 0.0
+        if abs(nightProgress - targetNight) > 0.005 {
+            nightProgress = lerp(nightProgress, targetNight, min(1.0, dt * 1.8))
+            applySkyLighting(progress: nightProgress)
+        }
+
+        updateCloudsAndWeather(dt: dt)
+        updatePlayerPhysics(dt: dt)
+        updateBoatMotion(dt: dt)
+        updateMobs(dt: dt)
+        updateArrows(dt: dt)
+        updateDroppedItems(dt: dt)
+        updateExperienceOrbs(dt: dt)
+        updateActiveEffectsAndRegeneration(dt: dt)
+        updateCameraTransform()
+
+        for (coord, node) in blockNodes {
+            let d = simd_distance(node.simdPosition, playerPos)
+            if d > maxViewDistance + 2.0 {
+                node.removeFromParentNode()
+                blockNodes.removeValue(forKey: coord)
+            }
+        }
+
+        simTickTimer += dt
+        if simTickTimer >= 0.25 {
+            simTickTimer = 0
+            updateChunksAroundPlayer()
+            updatePressurePlates()
+            updateFurnace(dt: 0.25)
+            syncBossHUD()
+            let px = Int(floor(playerPos.x)), py = Int(floor(playerPos.y - 1.0)), pz = Int(floor(playerPos.z))
+            let biome = BiomeType.biomeAt(x: px, z: pz, dimension: activeDimension)
+            currentBiome = biome
+            if activeDimension == .overworld {
+                discoveredBiomes.insert(biome.rawValue)
+                if biome == .swamp { unlockAchievement("swamp_walker") }
+                if biome == .jungle { unlockAchievement("jungle_explorer") }
+                if biome == .taiga { unlockAchievement("taiga_traveler") }
+                if biome == .beach { unlockAchievement("coastal_roamer") }
+                let overworldBiomes: Set<String> = [
+                    BiomeType.plains.rawValue, BiomeType.desert.rawValue, BiomeType.forest.rawValue,
+                    BiomeType.highlands.rawValue, BiomeType.ocean.rawValue, BiomeType.beach.rawValue,
+                    BiomeType.swamp.rawValue, BiomeType.taiga.rawValue, BiomeType.jungle.rawValue
+                ]
+                if discoveredBiomes.isSuperset(of: overworldBiomes) { unlockAchievement("biome_explorer") }
+            }
+            coordsText = "\(biome.rawValue) · X: \(px)  Y: \(py)  Z: \(pz)"
+        }
+
+        cropGrowthTimer += dt
+        if cropGrowthTimer >= 4.0 {
+            cropGrowthTimer = 0
+            cropGrowthCycle += 1
+            for coord in blocks.keys where blocks[coord] == .crop {
+                let st = cropStages[coord] ?? 0
+                if st < 3 {
+                    let next = st + 1
+                    cropStages[coord] = next
+                    blockNodes[coord]?.scale = SCNVector3(1.0, CGFloat(0.45 + Double(next) * 0.22), 1.0)
+                }
+            }
+            if cropGrowthCycle % 6 == 0 {
+                saveWorld()
+            }
+        }
+
+        if multiplayerEnabled {
+            netSyncTimer += dt
+            if netSyncTimer >= 0.12 {
+                netSyncTimer = 0
+                sendPlayerState()
+            }
+            connectedPeerCount = lanManager.connectedPeers.count
+        }
+    }
+
+    private func updateCloudsAndWeather(dt: Float) {
+        for c in cloudNodes {
+            c.position.x += dt * 0.45
+            if c.position.x > 18 { c.position.x = -18 }
+        }
+        guard weather != .clear && activeDimension == .overworld else { return }
+        let speedY: Float = (weather == .snowstorm) ? -2.4 : -9.5
+        let driftX: Float = (weather == .snowstorm) ? 1.1 : -0.35
+        for n in weatherNodes {
+            n.position.y += speedY * dt
+            n.position.x += driftX * dt
+            if n.position.y < 1.5 {
+                n.position = SCNVector3(playerPos.x + Float.random(in: -12...12), playerPos.y + Float.random(in: 7...13), playerPos.z + Float.random(in: -12...12))
+            }
+        }
+    }
+
+    private func updatePressurePlates() {
+        var nowActive: Set<BlockCoord> = []
+        let pCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 1.2)), z: Int(floor(playerPos.z)))
+        for offset in [BlockCoord(x: 0, y: 0, z: 0), BlockCoord(x: 0, y: 1, z: 0)] {
+            let test = BlockCoord(x: pCoord.x + offset.x, y: pCoord.y + offset.y, z: pCoord.z + offset.z)
+            if blocks[test] == .pressurePlate { nowActive.insert(test) }
+        }
+        for mob in mobs {
+            let mCoord = BlockCoord(x: Int(floor(mob.position.x)), y: Int(floor(mob.position.y)), z: Int(floor(mob.position.z)))
+            if blocks[mCoord] == .pressurePlate { nowActive.insert(mCoord) }
+        }
+        if nowActive != activePressurePlates {
+            for plate in activePressurePlates.subtracting(nowActive) {
+                blockNodes[plate]?.scale = SCNVector3(1.0, 1.0, 1.0)
+                propagateRedstone(around: plate)
+            }
+            for plate in nowActive.subtracting(activePressurePlates) {
+                blockNodes[plate]?.scale = SCNVector3(1.0, 0.4, 1.0)
+                SoundEngine.shared.play(.piston)
+                propagateRedstone(around: plate)
+            }
+            activePressurePlates = nowActive
+        }
+    }
+
+    private func updateFurnace(dt: Double) {
+        if furnaceBurnRemaining > 0 {
+            furnaceBurnRemaining = max(0, furnaceBurnRemaining - dt)
+        }
+        if queuedSmeltCount > 0 && furnaceBurnRemaining > 0 {
+            furnaceSmeltProgress += dt / 3.0
+            if furnaceSmeltProgress >= 1.0 {
+                furnaceSmeltProgress = 0.0
+                queuedSmeltCount -= 1
+                _ = addItems(1, of: .glass)
+                SoundEngine.shared.play(.pickup)
+                statusMessage = "Furnace smelted 1 Glass"
+            }
+        } else if queuedSmeltCount == 0 {
+            furnaceSmeltProgress = 0.0
+        }
+    }
+
+    private func updateBoatMotion(dt: Float) {
+        guard isInBoat, let boat = boatNode else { return }
+        let turnRate: Float = 1.65
+        let accel: Float = 5.4
+        let maxSpeed: Float = 6.2
+        let drag: Float = 0.92
+        boat.eulerAngles.y -= moveInput.x * turnRate * dt
+        yaw = boat.eulerAngles.y
+        pitch = -0.06
+        if abs(moveInput.y) > 0.05 {
+            boatSpeed += moveInput.y * accel * dt
+            boatSpeed = max(-maxSpeed * 0.55, min(maxSpeed, boatSpeed))
+        } else {
+            boatSpeed *= pow(drag, dt * 20)
+            if abs(boatSpeed) < 0.04 { boatSpeed = 0 }
+        }
+        let forward = SIMD3<Float>(-sin(boat.eulerAngles.y), 0, -cos(boat.eulerAngles.y))
+        let delta = forward * boatSpeed * dt
+        let nextX = boat.position.x + delta.x
+        let nextZ = boat.position.z + delta.z
+        let probeCoord = BlockCoord(x: Int(floor(nextX)), y: Int(floor(boat.position.y - 0.15)), z: Int(floor(nextZ)))
+        if let blockAtNext = blocks[probeCoord], blockAtNext != .water && !blockAtNext.isPassable {
+            boatSpeed = 0
+        } else {
+            let movedDistance = sqrt(delta.x * delta.x + delta.z * delta.z)
+            boat.position.x = nextX
+            boat.position.z = nextZ
+            boatTravelDistance += movedDistance
+            if boatTravelDistance >= 100 { unlockAchievement("sailor") }
+            if movedDistance > 0.001 {
+                boatAutosaveTimer += dt
+                if boatAutosaveTimer >= 3.0 {
+                    boatAutosaveTimer = 0
+                    saveWorld()
+                }
+            }
+        }
+        let waterCoord = BlockCoord(x: Int(floor(boat.position.x)), y: Int(floor(boat.position.y - 0.65)), z: Int(floor(boat.position.z)))
+        if blocks[waterCoord] == .water {
+            boat.position.y = Float(waterCoord.y) + 1.06 + sin(CACurrentMediaTime() * 3.0) * 0.03
+        } else {
+            boatSpeed = 0
+        }
+        let paddleAngle = sin(CACurrentMediaTime() * 8.0) * min(0.55, abs(boatSpeed) * 0.14)
+        for (index, paddle) in boatPaddles.enumerated() {
+            paddle.eulerAngles.y = (index == 0 ? 1 : -1) * paddleAngle
+        }
+        playerPos = SIMD3<Float>(boat.position.x, boat.position.y + 1.65, boat.position.z)
+        verticalVelocity = 0
+    }
+
+    private func updatePlayerPhysics(dt: Float) {
+        if isInBoat { return }
+        let speedBoostActive = (activePotionEffects[.speed] ?? 0) > 0
+        let sprintMultiplier: Float = (isSprinting && stamina > 1 && moveInput.y > 0.1) ? 1.48 : 1.0
+        let speed: Float = (isUnderwater ? 3.2 : 6.0) * sprintMultiplier * (speedBoostActive ? 1.32 : 1.0)
+        let forwardXZ = simd_normalize(SIMD2<Float>(-sin(yaw), -cos(yaw)))
+        let rightXZ = simd_normalize(SIMD2<Float>(cos(yaw), -sin(yaw)))
+        let wishXZ = forwardXZ * moveInput.y + rightXZ * moveInput.x
+        let wishLen = simd_length(wishXZ)
+        let stepXZ = (wishLen > 0.001) ? (wishXZ / wishLen) * speed * dt : SIMD2<Float>.zero
+
+        if isSprinting && wishLen > 0.05 && !isUnderwater {
+            stamina = max(0, stamina - Double(20 * dt))
+            staminaRecoveryDelay = 1.1
+            if stamina <= 0.1 { isSprinting = false }
+        } else {
+            if staminaRecoveryDelay > 0 {
+                staminaRecoveryDelay = max(0, staminaRecoveryDelay - dt)
+            } else {
+                stamina = min(100, stamina + Double(15 * dt))
+            }
+        }
+
+        let r: Float = 0.28
+        let feetY0 = Int(floor(playerPos.y - 1.45))
+        let feetY1 = Int(floor(playerPos.y - 0.6))
+
+        let nextX = playerPos.x + stepXZ.x
+        let canMoveX = !hasSolidBlock(atX: Int(floor(nextX + (stepXZ.x >= 0 ? r : -r))), y: feetY0, z: Int(floor(playerPos.z)))
+            && !hasSolidBlock(atX: Int(floor(nextX + (stepXZ.x >= 0 ? r : -r))), y: feetY1, z: Int(floor(playerPos.z)))
+        if canMoveX { playerPos.x = nextX }
+
+        let nextZ = playerPos.z + stepXZ.y
+        let canMoveZ = !hasSolidBlock(atX: Int(floor(playerPos.x)), y: feetY0, z: Int(floor(nextZ + (stepXZ.y >= 0 ? r : -r))))
+            && !hasSolidBlock(atX: Int(floor(playerPos.x)), y: feetY1, z: Int(floor(nextZ + (stepXZ.y >= 0 ? r : -r))))
+        if canMoveZ { playerPos.z = nextZ }
+
+        let eyeCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y + 0.05)), z: Int(floor(playerPos.z)))
+        let bodyCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 0.7)), z: Int(floor(playerPos.z)))
+        isUnderwater = (blocks[eyeCoord] == .water)
+        let inWater = (blocks[eyeCoord] == .water || blocks[bodyCoord] == .water)
+
+        if inWater {
+            fallStartY = nil
+            verticalVelocity = max(-2.2, verticalVelocity - 6.5 * dt)
+        } else {
+            verticalVelocity -= 18.5 * dt
+        }
+        playerPos.y += verticalVelocity * dt
+
+        if verticalVelocity < 0 && fallStartY == nil && !inWater {
+            fallStartY = playerPos.y
+        }
+
+        let px = Int(floor(playerPos.x))
+        let pz = Int(floor(playerPos.z))
+        let groundCheckY = Int(floor(playerPos.y - 1.5))
+        let landed = hasSolidBlock(atX: px, y: groundCheckY, z: pz)
+
+        if landed && verticalVelocity < 0 {
+            if let startY = fallStartY {
+                let fallDistance = startY - playerPos.y
+                if fallDistance > 4.2 && gameMode == .survival {
+                    let dmg = Int(min(12, floor((fallDistance - 3.5) * 2.0)))
+                    if dmg > 0 { applyPlayerDamage(dmg, source: "Fall") }
+                }
+            }
+            fallStartY = nil
+            playerPos.y = Float(groundCheckY + 1) + 1.5
+            verticalVelocity = 0.0
+        }
+
+        let footBlock = blocks[BlockCoord(x: px, y: groundCheckY, z: pz)]
+        let atBlock = blocks[BlockCoord(x: px, y: Int(floor(playerPos.y - 0.9)), z: pz)]
+        let fireImmune = (activePotionEffects[.fireResistance] ?? 0) > 0
+        if (footBlock == .magma || atBlock == .magma) && gameMode == .survival && !fireImmune {
+            hazardTimer += dt
+            if hazardTimer >= 0.8 {
+                hazardTimer = 0
+                applyPlayerDamage(2, source: "Magma")
+            }
+        } else if activeDimension == .hell && playerPos.y < 1.3 && gameMode == .survival && !fireImmune {
+            hazardTimer += dt
+            if hazardTimer >= 0.7 {
+                hazardTimer = 0
+                applyPlayerDamage(3, source: "Lava crust")
+            }
+        } else {
+            hazardTimer = 0
+        }
+
+        if gameMode == .survival && wishLen > 0.1 {
+            hungerDrainTimer += dt
+            if hungerDrainTimer >= 9.0 {
+                hungerDrainTimer = 0
+                if hunger > 0 { hunger = max(0, hunger - 1) }
+            }
+        }
+
+        if playerPos.y < -8.0 {
+            statusMessage = "Fell into the void — Respawning"
+            respawnPlayer()
+        }
+    }
+
+    private func updateActiveEffectsAndRegeneration(dt: Float) {
+        var expired: [PotionKind] = []
+        for (potion, remaining) in activePotionEffects {
+            let next = remaining - dt
+            if next <= 0 {
+                expired.append(potion)
+            } else {
+                activePotionEffects[potion] = next
+            }
+        }
+        for potion in expired {
+            activePotionEffects.removeValue(forKey: potion)
+        }
+        if miningFatigueRemaining > 0 {
+            miningFatigueRemaining = max(0, miningFatigueRemaining - dt)
+        }
+        if dolphinGuideAchievementTimer > 0 {
+            dolphinGuideAchievementTimer = max(0, dolphinGuideAchievementTimer - dt)
+            if let dolphin = mobs.first(where: { $0.kind == .dolphin && simd_distance($0.position, playerPos) < 16 }) {
+                unlockAchievement("dolphin_friend")
+                dolphinGuideAchievementTimer = 0
+                statusMessage = "Dolphin guided you to treasure!"
+                saveWorld()
+            }
+        }
+        guard gameMode == .survival, health > 0 else { return }
+
+        if (activePotionEffects[.regeneration] ?? 0) > 0 && health < 20 {
+            regenerationTickTimer += dt
+            if regenerationTickTimer >= 2.2 {
+                regenerationTickTimer = 0
+                health = min(20, health + 2)
+            }
+        } else {
+            regenerationTickTimer = 0
+        }
+
+        if isUnderwater && (activePotionEffects[.waterBreathing] ?? 0) <= 0 {
+            oxygenTickTimer += dt
+            if oxygenTickTimer >= 1.0 {
+                oxygenTickTimer = 0
+                oxygen = max(0, oxygen - 1)
+            }
+            if oxygen == 0 {
+                drowningTimer += dt
+                if drowningTimer >= 1.5 {
+                    drowningTimer = 0
+                    applyPlayerDamage(2, source: "Drowning")
+                }
+            }
+        } else {
+            oxygenTickTimer = 0
+            drowningTimer = 0
+            if oxygen < 10 { oxygen = min(10, oxygen + 1) }
+        }
+
+        if hunger >= 18 && health < 20 {
+            naturalRegenerationTimer += dt
+            starvationTimer = 0
+            if naturalRegenerationTimer >= 4.0 {
+                naturalRegenerationTimer = 0
+                health = min(20, health + 1)
+            }
+        } else if hunger == 0 {
+            naturalRegenerationTimer = 0
+            starvationTimer += dt
+            if starvationTimer >= 4.0 && health > 1 {
+                starvationTimer = 0
+                health = max(1, health - 1)
+                statusMessage = "Starving — eat food to restore hunger"
+            }
+        } else {
+            naturalRegenerationTimer = 0
+            starvationTimer = 0
+        }
+    }
+
+    private func villageProfession(near position: SIMD3<Float>) -> VillagerProfession {
+        let index = Int(abs(position.x.rounded() * 3 + position.z.rounded() * 7)) % VillagerProfession.allCases.count
+        return VillagerProfession.allCases[index]
+    }
+
+    private func updateMobs(dt: Float) {
+        let isNight = (activeDimension == .overworld && nightProgress > 0.55)
+        let isDaylight = (activeDimension == .overworld && nightProgress <= 0.55)
+
+        for mob in mobs {
+            if mob.loveTimer > 0 { mob.loveTimer = max(0, mob.loveTimer - dt) }
+            if mob.breedCooldown > 0 { mob.breedCooldown = max(0, mob.breedCooldown - dt) }
+            if mob.isBaby {
+                mob.ageTimer = max(0, mob.ageTimer - dt)
+                if mob.ageTimer <= 0 {
+                    mob.isBaby = false
+                    mob.node.scale = SCNVector3(1.0, 1.0, 1.0)
+                }
+            }
+            if mob.kind == .villager && mob.isBaby {
+                villagerGrowthTimer += dt
+                if villagerGrowthTimer >= 60.0 {
+                    villagerGrowthTimer = 0.0
+                    mob.isBaby = false
+                    mob.node.scale = SCNVector3(1.0, 1.0, 1.0)
+                    statusMessage = "A young Villager has grown up!"
+                    saveWorld()
+                }
+            }
+
+            if simd_length(mob.knockback) > 0.05 {
+                mob.position.x += mob.knockback.x * dt
+                mob.position.z += mob.knockback.y * dt
+                mob.knockback *= pow(0.08, dt)
+            }
+
+            if mob.kind == .enderDragon {
+                mob.dragonPhaseTimer -= dt
+                if mob.dragonPhaseTimer <= 0 {
+                    switch mob.dragonPhase {
+                    case .circling: mob.dragonPhase = .diving; mob.dragonPhaseTimer = 2.6
+                    case .diving: mob.dragonPhase = .perching; mob.dragonPhaseTimer = 2.2
+                    case .perching: mob.dragonPhase = .circling; mob.dragonPhaseTimer = 4.0
+                    }
+                }
+
+                let t = Float(CACurrentMediaTime()) * 0.65
+                switch mob.dragonPhase {
+                case .circling:
+                    let orbitRadius: Float = 8.5
+                    let targetX = cos(t) * orbitRadius
+                    let targetZ = sin(t) * orbitRadius
+                    let dx = targetX - mob.position.x
+                    let dz = targetZ - mob.position.z
+                    mob.position.x += dx * min(1.0, dt * 2.2)
+                    mob.position.z += dz * min(1.0, dt * 2.2)
+                    mob.position.y = 8.5 + sin(t * 2.0) * 1.1
+                    mob.yaw = atan2(dx, dz)
+                case .diving:
+                    let toPlayer = playerPos - mob.position
+                    let dist = max(0.1, simd_length(toPlayer))
+                    mob.position += (toPlayer / dist) * 5.2 * dt
+                    mob.yaw = atan2(toPlayer.x, toPlayer.z)
+                case .perching:
+                    let perchX: Float = 0.5
+                    let perchZ: Float = 0.5
+                    let perchY = Float(highestSolidY(atX: 0, z: 0)) + 2.2
+                    mob.position.x += (perchX - mob.position.x) * min(1.0, dt * 2.5)
+                    mob.position.z += (perchZ - mob.position.z) * min(1.0, dt * 2.5)
+                    mob.position.y += (perchY - mob.position.y) * min(1.0, dt * 2.5)
+                    mob.yaw = atan2(playerPos.x - mob.position.x, playerPos.z - mob.position.z)
+                }
+
+                let crystalNear = blocks.first(where: { $0.value == .endCrystal && simd_distance($0.key.scnVector.simd, mob.position) < 6.0 })
+                if crystalNear != nil && mob.hp < 28 {
+                    mob.dragonHealTimer += dt
+                    if mob.dragonHealTimer >= 1.5 {
+                        mob.dragonHealTimer = 0
+                        mob.hp = min(28, mob.hp + 2)
+                        spawnParticles(at: mob.position, color: UIColor.magenta, count: 4)
+                    }
+                }
+
+                if simd_distance(mob.position, playerPos) < 2.4 && gameMode == .survival {
+                    mob.attackCooldown -= dt
+                    if mob.attackCooldown <= 0 {
+                        mob.attackCooldown = 1.4
+                        applyPlayerDamage(4, source: "Ender Dragon")
+                    }
+                }
+                mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+                mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+                continue
+            }
+
+            if mob.kind == .blaze {
+                let toPlayer = playerPos - mob.position
+                let dist = simd_length(toPlayer)
+                let hoverY = Float(highestSolidY(atX: Int(floor(mob.position.x)), z: Int(floor(mob.position.z)))) + 2.2 + sin(Float(CACurrentMediaTime()) * 3.0) * 0.35
+                mob.position.y += (hoverY - mob.position.y) * min(1.0, dt * 3.0)
+                if dist < 13.0 {
+                    let dirXZ = simd_normalize(SIMD2<Float>(toPlayer.x, toPlayer.z) + SIMD2<Float>(0.001, 0.001))
+                    if dist > 5.0 {
+                        mob.position.x += dirXZ.x * 2.1 * dt
+                        mob.position.z += dirXZ.y * 2.1 * dt
+                    }
+                    mob.yaw = atan2(dirXZ.x, dirXZ.y)
+                    mob.attackCooldown -= dt
+                    if mob.attackCooldown <= 0 {
+                        mob.attackCooldown = 2.0
+                        spawnArrow(from: mob.position + SIMD3<Float>(0, 0.4, 0), target: playerPos, damage: 3, color: UIColor.orange)
+                    }
+                }
+                mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+                mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+                continue
+            }
+
+            if [.fish, .dolphin, .turtle, .guardian].contains(mob.kind) {
+                let speed: Float = mob.kind == .fish ? 1.8 : (mob.kind == .dolphin ? 3.4 : (mob.kind == .guardian ? 2.1 : 1.1))
+                var swimDir = SIMD2<Float>(sin(mob.yaw), cos(mob.yaw))
+                if mob.kind == .dolphin && dolphinGuideAchievementTimer > 0, let target = treasureCompassTarget {
+                    let delta = SIMD2<Float>(Float(target.x) + 0.5 - mob.position.x, Float(target.z) + 0.5 - mob.position.z)
+                    if simd_length(delta) > 0.4 {
+                        swimDir = simd_normalize(delta)
+                        mob.yaw = atan2(swimDir.x, swimDir.y)
+                    }
+                } else {
+                    mob.wanderTimer -= dt
+                    if mob.wanderTimer <= 0 {
+                        mob.wanderTimer = Float.random(in: 1.0...2.4)
+                        mob.yaw = Float.random(in: 0...(Float.pi * 2))
+                        swimDir = SIMD2<Float>(sin(mob.yaw), cos(mob.yaw))
+                    }
+                }
+                let nextPos = mob.position + SIMD3<Float>(swimDir.x * speed * dt, 0, swimDir.y * speed * dt)
+                let probe = BlockCoord(x: Int(floor(nextPos.x)), y: Int(floor(mob.position.y)), z: Int(floor(nextPos.z)))
+                if blocks[probe] == .water {
+                    mob.position.x = nextPos.x
+                    mob.position.z = nextPos.z
+                } else {
+                    mob.yaw += Float.pi * 0.65
+                }
+                let waterColumnY = Int(floor(mob.position.y))
+                if blocks[BlockCoord(x: Int(floor(mob.position.x)), y: waterColumnY, z: Int(floor(mob.position.z)))] == .water {
+                    mob.position.y = Float(waterColumnY) + 0.35 + sin(Float(CACurrentMediaTime()) * 3.0 + Float(mob.wanderTimer)) * 0.08
+                }
+                if mob.kind == .guardian && gameMode == .survival {
+                    let dist = simd_distance(mob.position, playerPos)
+                    let range: Float = mob.isElderGuardian ? 11.5 : 8.5
+                    if dist < range {
+                        mob.attackCooldown -= dt
+                        if mob.attackCooldown <= 0 {
+                            mob.attackCooldown = mob.isElderGuardian ? 1.85 : 2.1
+                            applyPlayerDamage(mob.isElderGuardian ? 5 : 3, source: mob.isElderGuardian ? "Elder Guardian" : "Guardian")
+                            if mob.isElderGuardian {
+                                miningFatigueRemaining = 6.0
+                                statusMessage = "Elder Guardian mining fatigue applied"
+                            }
+                        }
+                    }
+                }
+                mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+                mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+                continue
+            }
+
+            if [.wolf, .fox, .bear].contains(mob.kind) && mob.isTamed {
+                if mob.hp < 12 {
+                    mob.petRegenTimer += dt
+                    if mob.petRegenTimer >= 2.2 {
+                        mob.petRegenTimer = 0
+                        mob.hp = min(12, mob.hp + 1)
+                    }
+                }
+                if mob.isSitting {
+                    mob.node.position = SCNVector3(mob.position.x, mob.position.y - 0.14, mob.position.z)
+                    mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+                    continue
+                }
+                if mob.isGuarding, let gp = mob.guardPosition {
+                    if let targetHostile = mobs.first(where: { [.zombie, .skeleton, .creeper, .enderman, .spider, .blaze].contains($0.kind) && simd_distance($0.position, gp) < 11.0 }) {
+                        let toHostile = targetHostile.position - mob.position
+                        let dist = simd_length(toHostile)
+                        if dist > 1.3 {
+                            let dir = simd_normalize(SIMD2<Float>(toHostile.x, toHostile.z))
+                            mob.position.x += dir.x * 3.6 * dt; mob.position.z += dir.y * 3.6 * dt; mob.yaw = atan2(dir.x, dir.y)
+                        } else {
+                            mob.attackCooldown -= dt
+                            if mob.attackCooldown <= 0 {
+                                mob.attackCooldown = 0.85; targetHostile.hp -= 4; SoundEngine.shared.play(.hitMob)
+                                if targetHostile.hp <= 0 { targetHostile.node.removeFromParentNode(); mobs.removeAll { $0.id == targetHostile.id } }
+                            }
+                        }
+                    } else {
+                        let delta = gp - mob.position
+                        let dist = simd_length(SIMD2<Float>(delta.x, delta.z))
+                        if dist > 0.7 {
+                            let dir = simd_normalize(SIMD2<Float>(delta.x, delta.z))
+                            mob.position.x += dir.x * 2.5 * dt; mob.position.z += dir.y * 2.5 * dt; mob.yaw = atan2(dir.x, dir.y)
+                        }
+                    }
+                    let gy = Float(highestSolidY(atX: Int(floor(mob.position.x)), z: Int(floor(mob.position.z))))
+                    mob.position.y = gy + 1.0
+                    mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+                    mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+                    continue
+                }
+                if let targetHostile = mobs.first(where: { [.zombie, .skeleton, .creeper, .enderman, .spider, .blaze].contains($0.kind) && simd_distance($0.position, playerPos) < 12.0 }) {
+                    let toHostile = targetHostile.position - mob.position
+                    let dist = simd_length(toHostile)
+                    if dist > 1.3 {
+                        let dir = simd_normalize(SIMD2<Float>(toHostile.x, toHostile.z))
+                        mob.position.x += dir.x * 3.8 * dt; mob.position.z += dir.y * 3.8 * dt; mob.yaw = atan2(dir.x, dir.y)
+                    } else {
+                        mob.attackCooldown -= dt
+                        if mob.attackCooldown <= 0 {
+                            mob.attackCooldown = 0.85; targetHostile.hp -= 4; SoundEngine.shared.play(.hitMob)
+                            if targetHostile.hp <= 0 { targetHostile.node.removeFromParentNode(); mobs.removeAll { $0.id == targetHostile.id } }
+                        }
+                    }
+                } else {
+                    let delta = playerPos - mob.position
+                    let dist = simd_length(SIMD2<Float>(delta.x, delta.z))
+                    if dist > 3.2 {
+                        let dir = simd_normalize(SIMD2<Float>(delta.x, delta.z))
+                        mob.position.x += dir.x * 3.4 * dt; mob.position.z += dir.y * 3.4 * dt; mob.yaw = atan2(dir.x, dir.y)
+                    }
+                }
+                let gy = Float(highestSolidY(atX: Int(floor(mob.position.x)), z: Int(floor(mob.position.z))))
+                mob.position.y = gy + 1.0
+                mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+                mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+                continue
+            }
+
+            if mob.kind == .villager {
+                if mob.raidDamageCooldown > 0 { mob.raidDamageCooldown = max(0, mob.raidDamageCooldown - dt) }
+                if let raider = mobs.first(where: { [.zombie, .skeleton, .creeper, .spider].contains($0.kind) && simd_distance($0.position, mob.position) < 9.0 }) {
+                    let away = mob.position - raider.position
+                    let dist = simd_length(SIMD2<Float>(away.x, away.z))
+                    if dist > 0.1 {
+                        let dir = simd_normalize(SIMD2<Float>(away.x, away.z))
+                        mob.position.x += dir.x * 2.5 * dt
+                        mob.position.z += dir.y * 2.5 * dt
+                        mob.yaw = atan2(dir.x, dir.y)
+                    }
+                    if simd_distance(raider.position, mob.position) < 1.5 && mob.raidDamageCooldown <= 0 {
+                        mob.raidDamageCooldown = 1.6
+                        mob.hp -= 2
+                        if mob.hp <= 0 {
+                            mob.node.removeFromParentNode()
+                            mobs.removeAll { $0.id == mob.id }
+                            statusMessage = "A \(mob.profession.rawValue) Villager fell in a raid!"
+                            continue
+                        }
+                    }
+                } else if isNight {
+                    if mob.homePosition == nil || mob.workstationPosition == nil { assignVillagerDestinations(mob) }
+                    if let home = mob.homePosition {
+                        let arrivedHome = advanceVillagerAlongPath(mob, toward: home, speed: 1.75, dt: dt)
+                        mob.isSleeping = arrivedHome
+                    }
+                } else {
+                    mob.isSleeping = false
+                    if mob.homePosition == nil || mob.workstationPosition == nil { assignVillagerDestinations(mob) }
+                    if let station = mob.workstationPosition {
+                        let arrivedWork = advanceVillagerAlongPath(mob, toward: station, speed: 1.55, dt: dt)
+                        if arrivedWork && mob.profession == .farmer {
+                            mob.farmWorkTimer += dt
+                            if mob.farmWorkTimer >= 6.0 {
+                                mob.farmWorkTimer = 0.0
+                                foodInventory[.wheat, default: 0] = min(64, foodCount(for: .wheat) + 1)
+                            }
+                        }
+                    }
+                }
+                let gy = Float(highestSolidY(atX: Int(floor(mob.position.x)), z: Int(floor(mob.position.z))))
+                mob.position.y = gy + (mob.isSleeping ? 0.65 : 1.0)
+                mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+                mob.node.eulerAngles = SCNVector3(mob.isSleeping ? .pi / 2.4 : 0, mob.yaw, 0)
+                continue
+            }
+
+            if mob.kind == .ironGolem {
+                if let threat = mobs.first(where: { [.zombie, .skeleton, .creeper, .enderman, .spider].contains($0.kind) && simd_distance($0.position, mob.position) < 9.0 }) {
+                    let delta = threat.position - mob.position
+                    let dist = simd_length(SIMD2<Float>(delta.x, delta.z))
+                    if dist > 1.4 {
+                        let dir = simd_normalize(SIMD2<Float>(delta.x, delta.z))
+                        mob.position.x += dir.x * 2.2 * dt
+                        mob.position.z += dir.y * 2.2 * dt
+                        mob.yaw = atan2(dir.x, dir.y)
+                    } else {
+                        mob.attackCooldown -= dt
+                        if mob.attackCooldown <= 0 {
+                            mob.attackCooldown = 1.0
+                            threat.hp -= 6
+                            SoundEngine.shared.play(.hitMob)
+                            if threat.hp <= 0 {
+                                threat.node.removeFromParentNode()
+                                mobs.removeAll { $0.id == threat.id }
+                            }
+                        }
+                    }
+                }
+            } else {
+                let isHostile = [.zombie, .skeleton, .creeper, .enderman, .spider].contains(mob.kind)
+                let distToPlayer = simd_distance(mob.position, playerPos)
+                if isHostile && distToPlayer < 11.0 {
+                    let delta = playerPos - mob.position
+                    let dirXZ = simd_normalize(SIMD2<Float>(delta.x, delta.z) + SIMD2<Float>(0.001, 0.001))
+                    mob.position.x += dirXZ.x * 1.9 * dt
+                    mob.position.z += dirXZ.y * 1.9 * dt
+                    mob.yaw = atan2(dirXZ.x, dirXZ.y)
+
+                    if mob.kind == .skeleton {
+                        mob.attackCooldown -= dt
+                        if mob.attackCooldown <= 0 {
+                            mob.attackCooldown = 2.2
+                            spawnArrow(from: mob.position + SIMD3<Float>(0, 0.3, 0), target: playerPos)
+                        }
+                    } else if mob.kind == .creeper && distToPlayer < 2.2 {
+                        mob.isCreeperPrimed = true
+                        mob.creeperFuseRemaining -= dt
+                        let pulse = 1.0 + CGFloat(sin(CACurrentMediaTime() * 28.0) * 0.14)
+                        mob.node.scale = SCNVector3(pulse, pulse, pulse)
+                        if mob.creeperFuseRemaining <= 0 {
+                            let c = BlockCoord(x: Int(floor(mob.position.x)), y: Int(floor(mob.position.y)), z: Int(floor(mob.position.z)))
+                            mob.node.removeFromParentNode()
+                            mobs.removeAll { $0.id == mob.id }
+                            triggerExplosion(at: c, radius: 2)
+                            continue
+                        }
+                    } else if distToPlayer < 1.55 && gameMode == .survival {
+                        mob.attackCooldown -= dt
+                        if mob.attackCooldown <= 0 {
+                            mob.attackCooldown = 1.35
+                            let dmg = (mob.kind == .enderman) ? 3 : 2
+                            applyPlayerDamage(dmg, source: mob.kind.rawValue)
+                        }
+                    }
+                } else {
+                    mob.wanderTimer -= dt
+                    if mob.wanderTimer <= 0 {
+                        mob.wanderTimer = Float.random(in: 1.2...2.8)
+                        mob.yaw = Float.random(in: 0...(Float.pi * 2))
+                    }
+                    let speed: Float = (mob.kind == .bear) ? 1.5 : 1.1
+                    mob.position.x += sin(mob.yaw) * speed * dt
+                    mob.position.z += cos(mob.yaw) * speed * dt
+                }
+            }
+
+            let gy = Float(highestSolidY(atX: Int(floor(mob.position.x)), z: Int(floor(mob.position.z))))
+            mob.position.y = gy + 1.0
+            mob.node.position = SCNVector3(mob.position.x, mob.position.y, mob.position.z)
+            mob.node.eulerAngles = SCNVector3(0, mob.yaw, 0)
+
+            if isDaylight && [.zombie, .skeleton].contains(mob.kind) && simd_distance(mob.position, playerPos) > 14.0 {
+                mob.node.removeFromParentNode()
+                mobs.removeAll { $0.id == mob.id }
+            }
+        }
+    }
+
+    private func updateArrows(dt: Float) {
+        for idx in arrows.indices.reversed() {
+            let a = arrows[idx]
+            a.life -= dt
+            a.velocity.y -= 9.8 * dt
+            a.position += a.velocity * dt
+            a.node.position = SCNVector3(a.position.x, a.position.y, a.position.z)
+
+            let hitCoord = BlockCoord(x: Int(floor(a.position.x)), y: Int(floor(a.position.y)), z: Int(floor(a.position.z)))
+            let hitSolid = blocks[hitCoord] != nil && !(blocks[hitCoord]?.isPassable ?? true)
+            let hitPlayer = simd_distance(a.position, playerPos) < 0.85
+
+            if hitPlayer && gameMode == .survival {
+                applyPlayerDamage(a.damage, source: "Arrow")
+            }
+
+            if a.life <= 0 || hitSolid || hitPlayer {
+                a.node.removeFromParentNode()
+                arrows.remove(at: idx)
+            }
+        }
+    }
+
+    private func updateDroppedItems(dt: Float) {
+        for idx in droppedItems.indices.reversed() {
+            let d = droppedItems[idx]
+            d.bobPhase += dt * 3.0
+            d.node.eulerAngles.y += dt * 1.8
+            d.node.position = SCNVector3(d.position.x, d.position.y + sin(d.bobPhase) * 0.08, d.position.z)
+
+            if simd_distance(d.position, playerPos) < 1.85 {
+                let accepted = addItems(1, of: d.blockType)
+                if accepted > 0 {
+                    SoundEngine.shared.play(.pickup)
+                    statusMessage = "Picked up \(d.blockType.rawValue)"
+                }
+                d.node.removeFromParentNode()
+                droppedItems.remove(at: idx)
+            }
+        }
+    }
+
+    private func updateExperienceOrbs(dt: Float) {
+        for index in experienceOrbs.indices.reversed() {
+            let orb = experienceOrbs[index]
+            orb.bobPhase += dt * 3.4
+            orb.node.position = SCNVector3(orb.position.x, orb.position.y + sin(orb.bobPhase) * 0.08, orb.position.z)
+            if simd_distance(orb.position, playerPos) < 2.2 {
+                experiencePoints += orb.value
+                SoundEngine.shared.play(.pickup)
+                statusMessage = "+\(orb.value) XP (Level \(experienceLevel))"
+                orb.node.removeFromParentNode()
+                experienceOrbs.remove(at: index)
+            }
+        }
+    }
+
+    private func updateCameraTransform() {
+        let lookDir = SIMD3<Float>(-sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
+        let normDir = simd_normalize(lookDir)
+
+        if cameraMode == .overview {
+            avatarNode.isHidden = false
+            avatarNode.position = SCNVector3(playerPos.x, playerPos.y, playerPos.z)
+            avatarNode.eulerAngles = SCNVector3(0, yaw, 0)
+            let camPos = playerPos - normDir * 6.5 + SIMD3<Float>(0, 2.6, 0)
+            cameraNode.position = SCNVector3(camPos.x, camPos.y, camPos.z)
+            cameraNode.look(at: SCNVector3(playerPos.x + normDir.x * 2.0, playerPos.y + normDir.y * 1.5, playerPos.z + normDir.z * 2.0))
+        } else {
+            avatarNode.isHidden = true
+            cameraNode.position = SCNVector3(playerPos.x, playerPos.y, playerPos.z)
+            cameraNode.look(at: SCNVector3(playerPos.x + normDir.x, playerPos.y + normDir.y, playerPos.z + normDir.z))
+        }
+
+        if let target = targetedBlock(from: nil, in: nil) {
+            highlightNode.isHidden = false
+            highlightNode.position = target.scnVector
+        } else {
+            highlightNode.isHidden = true
         }
     }
 
     func saveWorld() {
-        let entries = modifiedCoords.compactMap { coord -> SavedVoxelEntry? in
-            blocks[coord].map { SavedVoxelEntry(x: coord.x, y: coord.y, z: coord.z, type: $0) }
+        let entries: [SavedVoxelEntry] = blocks.compactMap { coord, type in
+            guard modifiedCoords.contains(coord) else { return nil }
+            return SavedVoxelEntry(x: coord.x, y: coord.y, z: coord.z, type: type)
         }
-        let cropEntries = cropStages.compactMap { coord, stage -> CropSaveEntry? in
-            blocks[coord] == .crop ? CropSaveEntry(x: coord.x, y: coord.y, z: coord.z, stage: stage) : nil
+        let cropEntries: [CropSaveEntry] = cropStages.map { coord, st in
+            CropSaveEntry(x: coord.x, y: coord.y, z: coord.z, stage: st)
+        }
+        let villagerEntries: [SavedVillagerEntry] = mobs.filter { $0.kind == .villager }.map { mob in
+            SavedVillagerEntry(id: mob.id, x: mob.position.x, y: mob.position.y, z: mob.position.z,
+                               yaw: mob.yaw, hp: mob.hp, profession: mob.profession.rawValue,
+                               homeX: mob.homePosition?.x, homeY: mob.homePosition?.y, homeZ: mob.homePosition?.z,
+                               workX: mob.workstationPosition?.x, workY: mob.workstationPosition?.y, workZ: mob.workstationPosition?.z,
+                               isBaby: mob.isBaby, ageTimer: mob.ageTimer)
+        }
+        let petEntries: [SavedPetEntry] = mobs.filter { [.wolf, .fox, .bear].contains($0.kind) && $0.isTamed }.map { mob in
+            SavedPetEntry(id: mob.id, kind: mob.kind.rawValue, x: mob.position.x, y: mob.position.y, z: mob.position.z,
+                          yaw: mob.yaw, hp: mob.hp, isSitting: mob.isSitting, isGuarding: mob.isGuarding,
+                          guardX: mob.guardPosition?.x, guardY: mob.guardPosition?.y, guardZ: mob.guardPosition?.z)
         }
         let snapshot = SavedWorldSnapshot(
             blocks: entries,
@@ -5092,7 +5741,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             inventory: Dictionary(uniqueKeysWithValues: inventory.map { ($0.key.rawValue, $0.value) }),
             foodInventory: Dictionary(uniqueKeysWithValues: foodInventory.map { ($0.key.rawValue, $0.value) }),
             gameMode: gameMode.rawValue,
-            hotbarSlots: hotbarSlots.map { $0.rawValue },
+            hotbarSlots: hotbarSlots.map(\.rawValue),
             hotbarSelection: hotbarSelection,
             equippedGear: equippedGear.rawValue,
             gearDurability: gearDurability,
@@ -5113,1192 +5762,73 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             chestStorage: chestStorage,
             experiencePoints: experiencePoints,
             enchantments: enchantments,
-            villagers: mobs.filter { $0.kind == .villager }.map { mob in
-                SavedVillagerEntry(id: mob.id, x: mob.position.x, y: mob.position.y, z: mob.position.z,
-                                   yaw: mob.yaw, hp: mob.hp, profession: mob.profession.rawValue,
-                                   homeX: mob.homePosition?.x, homeY: mob.homePosition?.y, homeZ: mob.homePosition?.z,
-                                   workX: mob.workstationPosition?.x, workY: mob.workstationPosition?.y, workZ: mob.workstationPosition?.z,
-                                   isBaby: mob.isBaby, ageTimer: mob.ageTimer)
-            },
+            villagers: villagerEntries,
             potionInventory: Dictionary(uniqueKeysWithValues: potionInventory.map { ($0.key.rawValue, $0.value) }),
             unlockedAchievements: Array(unlockedAchievements),
             defeatedHostileCount: defeatedHostileCount,
             activePotionEffects: Dictionary(uniqueKeysWithValues: activePotionEffects.map { ($0.key.rawValue, $0.value) }),
             boatCount: boatCount,
-            deployedBoat: boatNode.map {
-                SavedBoatState(x: Float($0.position.x), y: Float($0.position.y),
-                               z: Float($0.position.z), yaw: Float($0.eulerAngles.y))
-            },
+            deployedBoat: boatNode.map { SavedBoatState(x: $0.position.x, y: $0.position.y, z: $0.position.z, yaw: $0.eulerAngles.y) },
             discoveredBiomes: Array(discoveredBiomes),
-            pets: mobs.filter { $0.isTamed && [.wolf, .fox, .bear].contains($0.kind) }.map { mob in
-                SavedPetEntry(id: mob.id, kind: mob.kind.rawValue, x: mob.position.x, y: mob.position.y,
-                              z: mob.position.z, yaw: mob.yaw, hp: mob.hp, isSitting: mob.isSitting)
-            }
+            pets: petEntries
         )
         if let data = try? JSONEncoder().encode(snapshot) {
             try? data.write(to: saveURL, options: .atomic)
         }
     }
 
-    func respawnPlayer() {
-        let spawn = customSpawnCoord ?? BlockCoord(x: 0, y: highestSolidY(atX: 0, z: 6) + 1, z: 6)
-        let groundY = highestSolidY(atX: spawn.x, z: spawn.z)
-        playerPos = SIMD3<Float>(Float(spawn.x) + 0.5, Float(groundY) + 2.2, Float(spawn.z) + 0.5)
-        verticalVelocity = 0
-        fallStartY = nil
-        health = 20
-        hunger = 20
-        oxygen = 10
-        stamina = 100
-        isSprinting = false
-        isUnderwater = false
-        drowningTimer = 0
-        oxygenTickTimer = 0
-        updateChunksAroundPlayer(force: true)
-        updateCameraTransform()
-        syncPlayerHUD()
-    }
-
-    private func applyDamage(_ amount: Int, reason: String) {
-        guard amount > 0 else { return }
-        let normalizedReason = reason.lowercased()
-        let isHeatDamage = normalizedReason.contains("burn") || normalizedReason.contains("lava") || normalizedReason.contains("magma")
-        if isHeatDamage && (activePotionEffects[.fireResistance] ?? 0) > 0 {
-            statusMessage = "Fire Resistance absorbed the heat damage"
-            return
-        }
-        let potionReduction = (activePotionEffects[.resistance] ?? 0) > 0 ? 3 : 0
-        let shieldReduction = isShieldRaised ? max(1, amount / 2) : 0
-        let reducedAmount = max(1, amount - effectiveArmorReduction - potionReduction - shieldReduction)
-        health = max(0, health - reducedAmount)
-        damageArmor()
-        SoundEngine.shared.play(.hurt)
-        if health == 0 {
-            statusMessage = "You died (\(reason)) — respawning"
-            respawnPlayer()
-        } else {
-            statusMessage = "\(reason) (-\(amount) HP)"
-        }
-    }
-
-    private func highestSolidY(atX x: Int, z: Int) -> Int {
-        for y in stride(from: 20, through: 0, by: -1) {
-            if let b = blocks[BlockCoord(x: x, y: y, z: z)], !b.isPassable { return y }
-        }
-        return 1
-    }
-
-    private func syncPlayerHUD() {
-        let ix = Int(floor(playerPos.x))
-        let iy = Int(floor(playerPos.y - 1.5))
-        let iz = Int(floor(playerPos.z))
-        coordsText = "X: \(ix)  Y: \(iy)  Z: \(iz)"
-        currentBiome = BiomeType.biomeAt(x: ix, z: iz, dimension: activeDimension)
-        if activeDimension == .overworld {
-            let newlyDiscovered = discoveredBiomes.insert(currentBiome.rawValue).inserted
-            if newlyDiscovered {
-                switch currentBiome {
-                case .swamp: unlockAchievement("swamp_walker")
-                case .jungle: unlockAchievement("jungle_explorer")
-                case .taiga: unlockAchievement("taiga_traveler")
-                case .beach: unlockAchievement("coastal_roamer")
-                default: break
-                }
-                let overworldBiomeNames = Set([BiomeType.plains.rawValue, BiomeType.desert.rawValue,
-                                               BiomeType.forest.rawValue, BiomeType.highlands.rawValue,
-                                               BiomeType.ocean.rawValue, BiomeType.beach.rawValue,
-                                               BiomeType.swamp.rawValue, BiomeType.taiga.rawValue,
-                                               BiomeType.jungle.rawValue])
-                if overworldBiomeNames.isSubset(of: discoveredBiomes) { unlockAchievement("biome_explorer") }
-                saveWorld()
-            }
-        }
-    }
-
-    // MARK: - Camera & Movement Controls
-
-    func setMoveInput(forward: Float, strafe: Float) { moveInput = SIMD2<Float>(strafe, forward) }
-
-    func lookDelta(deltaX: Float, deltaY: Float) {
-        let sensitivity: Float = 0.0055
-        yaw -= deltaX * sensitivity
-        pitch = max(-Float.pi * 0.46, min(Float.pi * 0.46, pitch - deltaY * sensitivity))
-        updateCameraTransform()
-    }
-
-    func jump() {
-        guard !isInBoat else { statusMessage = "Exit the boat before jumping"; return }
-        let feetBlock = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 1.72)), z: Int(floor(playerPos.z)))
-        if (blocks[feetBlock]?.isPassable == false) || verticalVelocity == 0 {
-            verticalVelocity = 6.2
-            SoundEngine.shared.play(.jump)
-        }
-    }
-
-    func toggleCameraMode() {
-        cameraMode = (cameraMode == .firstPerson) ? .overview : .firstPerson
-        avatarNode.isHidden = (cameraMode != .overview)
-        updateCameraTransform()
-    }
-
-    private func updateCameraTransform() {
-        avatarNode.position = SCNVector3(playerPos.x, playerPos.y, playerPos.z)
-        avatarNode.eulerAngles = SCNVector3(0, yaw, 0)
-        switch cameraMode {
-        case .firstPerson:
-            cameraNode.position = SCNVector3(playerPos.x, playerPos.y, playerPos.z)
-            cameraNode.eulerAngles = SCNVector3(pitch, yaw, 0)
-        case .overview:
-            let dist: Float = 14.0
-            cameraNode.position = SCNVector3(playerPos.x + sin(yaw) * dist, playerPos.y + 9.5, playerPos.z + cos(yaw) * dist)
-            cameraNode.look(at: SCNVector3(playerPos.x, playerPos.y - 0.5, playerPos.z))
-        }
-    }
-
-    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        let dt: Float
-        if let prev = lastFrameTime { dt = min(0.05, max(0.001, Float(time - prev))) } else { dt = 0.016 }
-        lastFrameTime = time
-        updateRedstoneSensors(at: time)
-        miningFatigueRemaining = max(0, miningFatigueRemaining - dt)
-        dolphinGuideAchievementTimer = max(0, dolphinGuideAchievementTimer - dt)
-
-        var toggledCycleNight: Bool?
-        if isAutoCycleEnabled && activeDimension == .overworld {
-            dayClockTimer += dt
-            if dayClockTimer >= 35.0 { dayClockTimer = 0; toggledCycleNight = !isNightMode }
-        }
-
-        weatherTimer += dt
-        let nextWeatherCycle = (weatherTimer >= 45.0)
-        if nextWeatherCycle { weatherTimer = 0 }
-
-        let targetNight: Float = isNightMode ? 1.0 : 0.0
-        let shouldUpdateSky = abs(nightProgress - targetNight) > 0.001
-        if shouldUpdateSky {
-            let step = dt * 2.4
-            nightProgress = nightProgress < targetNight ? min(targetNight, nightProgress + step) : max(targetNight, nightProgress - step)
-        }
-
-        for node in cloudNodes {
-            var nextX = node.position.x + CGFloat(0.75 * dt)
-            if nextX > 16 { nextX = -16 }
-            node.position.x = nextX
-        }
-
-        let forwardXZ = SIMD2<Float>(-sin(yaw), -cos(yaw))
-        let rightXZ = SIMD2<Float>(cos(yaw), -sin(yaw))
-        let wishXZ = forwardXZ * moveInput.y + rightXZ * moveInput.x
-        let wishLen = simd_length(wishXZ)
-        let dirXZ = wishLen > 0.001 ? wishXZ / wishLen : SIMD2<Float>(0, 0)
-
-        if isInBoat, let boat = boatNode {
-            let steer = moveInput.x
-            if abs(steer) > 0.05 { yaw -= steer * dt * 1.75 }
-            let forward = moveInput.y
-            boatSpeed += forward * 7.0 * dt
-            boatSpeed *= pow(0.985, dt * 60.0)
-            boatSpeed = max(-2.8, min(8.0, boatSpeed))
-            let dx = -sin(yaw) * boatSpeed * dt
-            let dz = -cos(yaw) * boatSpeed * dt
-            let candidateX = Float(boat.position.x) + dx
-            let candidateZ = Float(boat.position.z) + dz
-            let waterY = Int(floor(Float(boat.position.y) - 0.8))
-            let hullSamples = [
-                (0.0, 0.0), (-0.48, -0.58), (0.48, -0.58),
-                (-0.48, 0.58), (0.48, 0.58)
-            ]
-            let supportedSamples = hullSamples.reduce(into: 0) { count, sample in
-                let cell = BlockCoord(x: Int(floor(candidateX + Float(sample.0))),
-                                      y: waterY,
-                                      z: Int(floor(candidateZ + Float(sample.1))))
-                if blocks[cell] == .water { count += 1 }
-            }
-            if supportedSamples >= 3 {
-                boat.position.x = CGFloat(candidateX)
-                boat.position.z = CGFloat(candidateZ)
-                boatTravelDistance += abs(boatSpeed * dt)
-            } else {
-                boatSpeed *= 0.68
-            }
-            boat.eulerAngles.y = yaw
-            let rowingFactor = min(1.0, abs(boatSpeed) / 5.0)
-            boat.eulerAngles.x = CGFloat(-min(0.045, rowingFactor * 0.045) * (boatSpeed >= 0 ? 1 : -1))
-            boat.eulerAngles.z = CGFloat(-moveInput.x * rowingFactor * 0.035)
-            boat.position.y += CGFloat(sin(Float(time) * 2.1) * 0.012)
-            boatAutosaveTimer += dt
-            if boatAutosaveTimer >= 3.0 {
-                boatAutosaveTimer = 0
-                saveWorld()
-            }
-            for (index, paddle) in boatPaddles.enumerated() {
-                let phase = Float(time) * (abs(boatSpeed) > 0.15 ? 7.5 : 1.2) + (index == 0 ? 0 : .pi)
-                paddle.eulerAngles.x = sin(phase) * (abs(boatSpeed) > 0.15 ? 0.72 : 0.08)
-                paddle.eulerAngles.z = .pi / 2 + cos(phase) * 0.12
-            }
-            playerPos = SIMD3<Float>(Float(boat.position.x), Float(boat.position.y) + 1.65, Float(boat.position.z))
-            verticalVelocity = 0
-            fallStartY = nil
-            if boatTravelDistance >= 100 {
-                boatTravelDistance = 0
-                DispatchQueue.main.async { self.unlockAchievement("sailor") }
-            }
-        } else {
-        let potionSpeedBoost: Float = (activePotionEffects[.speed] ?? 0) > 0 ? 1.45 : 1.0
-        let dolphinGrace: Float = mobs.contains(where: { $0.kind == .dolphin && simd_distance($0.position, playerPos) < 5.0 }) ? 1.28 : 1.0
-        let canSprint = isSprinting && stamina > 1 && (gameMode == .creative || hunger > 0)
-        let sprintBoost: Float = canSprint ? 1.65 : 1.0
-        let moveSpeed: Float = 5.2 * potionSpeedBoost * sprintBoost * dolphinGrace
-        let nextX = playerPos.x + dirXZ.x * moveSpeed * dt
-        let nextZ = playerPos.z + dirXZ.y * moveSpeed * dt
-        let radius: Float = 0.28
-        let feetY = Int(floor(playerPos.y - 1.55))
-        let headY = Int(floor(playerPos.y - 0.2))
-
-        if !collidesHorizontal(x: nextX, z: playerPos.z, radius: radius, minY: feetY, maxY: headY) {
-            playerPos.x = nextX
-        } else if collidesHorizontal(x: nextX, z: playerPos.z, radius: radius, minY: feetY, maxY: feetY)
-                    && !collidesHorizontal(x: nextX, z: playerPos.z, radius: radius, minY: feetY + 1, maxY: headY + 1) {
-            playerPos.x = nextX
-            playerPos.y += 1.05
-        }
-
-        if !collidesHorizontal(x: playerPos.x, z: nextZ, radius: radius, minY: feetY, maxY: headY) {
-            playerPos.z = nextZ
-        } else if collidesHorizontal(x: playerPos.x, z: nextZ, radius: radius, minY: feetY, maxY: feetY)
-                    && !collidesHorizontal(x: playerPos.x, z: nextZ, radius: radius, minY: feetY + 1, maxY: headY + 1) {
-            playerPos.z = nextZ
-            playerPos.y += 1.05
-        }
-
-        let feetCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 1.55)), z: Int(floor(playerPos.z)))
-        let inWater = blocks[feetCoord] == .water
-        let headCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 0.2)), z: Int(floor(playerPos.z)))
-        let headSubmerged = blocks[headCoord] == .water
-
-        if inWater {
-            if headSubmerged {
-                // Buoyancy counters sinking and gently carries the player upward.
-                verticalVelocity = max(-0.45, verticalVelocity - 1.2 * dt)
-                if moveInput.y > 0.15 {
-                    verticalVelocity = min(2.2, verticalVelocity + 2.8 * dt)
-                }
-            } else {
-                verticalVelocity = max(-2.2, verticalVelocity - 5.5 * dt)
-            }
-            fallStartY = nil
-        } else {
-            if verticalVelocity < -1.5 && fallStartY == nil { fallStartY = playerPos.y }
-            verticalVelocity -= 15.0 * dt
-        }
-
-        let nextEyeY = playerPos.y + verticalVelocity * dt
-        let nextFeetY = nextEyeY - 1.65
-        var landedFallDamage = 0
-        var hazardHit: String?
-
-        if verticalVelocity < 0 {
-            let checkFeet = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(nextFeetY)), z: Int(floor(playerPos.z)))
-            if let blockBelow = blocks[checkFeet], !blockBelow.isPassable {
-                if let startY = fallStartY {
-                    let dropDistance = startY - nextEyeY
-                    if dropDistance > 4.2 { landedFallDamage = min(10, Int((dropDistance - 4.0) * 1.6)) }
-                    fallStartY = nil
-                }
-                playerPos.y = Float(checkFeet.y + 1) + 1.65
-                verticalVelocity = 0
-                if blockBelow == .magma {
-                    hazardTimer += dt
-                    if hazardTimer >= 0.9 { hazardTimer = 0; hazardHit = "Magma burn" }
-                } else {
-                    hazardTimer = 0
-                }
-            } else {
-                playerPos.y = max(2.2, nextEyeY)
-            }
-        } else {
-            playerPos.y = max(2.2, nextEyeY)
-        }
-
-        }
-        updateMobsArrowsAndDrops(dt: dt)
-        updateVillagerSchedules(dt: dt)
-
-        let viewSq = maxViewDistance * maxViewDistance
-        for (coord, node) in blockNodes {
-            let dx = coord.scnVector.x - playerPos.x
-            let dz = coord.scnVector.z - playerPos.z
-            node.isHidden = (dx * dx + dz * dz) > viewSq
-        }
-
-        if gameMode == .survival && wishLen > 0.01 { hungerDrainTimer += dt }
-        let shouldDrainHunger = (hungerDrainTimer >= (canSprint ? 5.5 : 9.0))
-        if shouldDrainHunger { hungerDrainTimer = 0 }
-
-        simTickTimer += dt
-        let shouldRunSim = (simTickTimer >= 0.85)
-        if shouldRunSim { simTickTimer = 0 }
-
-        netSyncTimer += dt
-        let shouldSyncNet = (netSyncTimer >= 0.35 && multiplayerEnabled)
-        if shouldSyncNet { netSyncTimer = 0 }
-
-        let updatedNight = nightProgress
-        DispatchQueue.main.async {
-            self.connectedPeerCount = self.lanManager.connectedPeers.count
-            self.isUnderwater = headSubmerged
-            if self.gameMode == .survival {
-                self.oxygenTickTimer += dt
-                if self.oxygenTickTimer >= 1.0 {
-                    self.oxygenTickTimer -= 1.0
-                    if headSubmerged && (self.activePotionEffects[.waterBreathing] ?? 0) <= 0 {
-                        self.oxygen = max(0, self.oxygen - 1)
-                    } else {
-                        self.oxygen = min(10, self.oxygen + 1)
-                    }
-                }
-                if headSubmerged && (self.activePotionEffects[.waterBreathing] ?? 0) <= 0 {
-                    self.drowningTimer += dt
-                    if self.oxygen == 0 && self.drowningTimer >= 1.5 {
-                        self.drowningTimer = 0
-                        self.applyDamage(2, reason: "Drowning")
-                    }
-                } else {
-                    self.drowningTimer = 0
-                }
-                if canSprint && wishLen > 0.01 {
-                    self.stamina = max(0, self.stamina - Double(dt) * 19.0)
-                    self.staminaRecoveryDelay = 0.65
-                    if self.stamina <= 0 { self.isSprinting = false }
-                } else {
-                    self.staminaRecoveryDelay = max(0, self.staminaRecoveryDelay - dt)
-                    if self.staminaRecoveryDelay <= 0 {
-                        let recoveryRate = (self.weather == .snowstorm && self.activeDimension == .overworld) ? 8.0 : 13.0
-                        self.stamina = min(100, self.stamina + Double(dt) * recoveryRate)
-                    }
-                }
-            } else {
-                self.oxygen = 10
-                self.stamina = 100
-                self.isSprinting = false
-                self.drowningTimer = 0
-                self.oxygenTickTimer = 0
-            }
-            for effect in Array(self.activePotionEffects.keys) {
-                let remaining = max(0, (self.activePotionEffects[effect] ?? 0) - dt)
-                if remaining <= 0 { self.activePotionEffects.removeValue(forKey: effect) }
-                else { self.activePotionEffects[effect] = remaining }
-            }
-            if (self.activePotionEffects[.regeneration] ?? 0) > 0 && self.health < 20 {
-                self.regenerationTickTimer += dt
-                if self.regenerationTickTimer >= 3.0 {
-                    self.regenerationTickTimer = 0
-                    self.health = min(20, self.health + 1)
-                }
-            } else { self.regenerationTickTimer = 0 }
-
-            // Survival-style natural regeneration at high hunger, and starvation
-            // pressure when the food bar has been empty for a sustained period.
-            if self.gameMode == .survival && self.hunger >= 18 && self.health > 0 && self.health < 20 {
-                self.naturalRegenerationTimer += dt
-                if self.naturalRegenerationTimer >= 4.0 {
-                    self.naturalRegenerationTimer = 0
-                    self.health = min(20, self.health + 1)
-                    self.hunger = max(0, self.hunger - 1)
-                }
-            } else { self.naturalRegenerationTimer = 0 }
-
-            if self.gameMode == .survival && self.hunger == 0 && self.health > 1 {
-                self.starvationTimer += dt
-                if self.starvationTimer >= 8.0 {
-                    self.starvationTimer = 0
-                    self.applyDamage(1, reason: "Starvation")
-                }
-            } else { self.starvationTimer = 0 }
-            if let nextNight = toggledCycleNight { self.isNightMode = nextNight }
-            if nextWeatherCycle && self.activeDimension == .overworld { self.cycleWeather() }
-            if shouldUpdateSky { self.applySkyLighting(progress: updatedNight) }
-            self.updateChunksAroundPlayer()
-            self.tickFurnace(dt: Double(dt))
-            if shouldRunSim {
-                self.stepFallingBlocks()
-                self.stepFlowingWater()
-                self.cropGrowthTimer += 0.85
-                if self.cropGrowthTimer >= 30.0 {
-                    self.cropGrowthTimer = 0
-                    self.stepCropGrowth()
-                }
-            }
-            if shouldSyncNet {
-                self.broadcastPlayerPosition()
-            }
-            if self.gameMode == .survival && shouldDrainHunger && self.hunger > 0 {
-                self.hunger = max(0, self.hunger - 1)
-            }
-            if landedFallDamage > 0 { self.applyDamage(landedFallDamage, reason: "Fall damage") }
-            if let hazard = hazardHit { self.applyDamage(2, reason: hazard) }
-            self.updateCameraTransform()
-            self.syncPlayerHUD()
-        }
-    }
-
-    private func tickFurnace(dt: Double) {
-        guard queuedSmeltCount > 0 || furnaceBurnRemaining > 0 else {
-            furnaceSmeltProgress = 0
-            return
-        }
-        if furnaceBurnRemaining > 0 {
-            furnaceBurnRemaining = max(0, furnaceBurnRemaining - dt)
-        } else if queuedSmeltCount > 0 && count(for: .coalOre) > 0 {
-            inventory[.coalOre] = max(0, count(for: .coalOre) - 1)
-            furnaceBurnRemaining = 8.0
-        }
-
-        if queuedSmeltCount > 0 && furnaceBurnRemaining > 0 {
-            furnaceSmeltProgress += dt / 3.0
-            if furnaceSmeltProgress >= 1.0 {
-                furnaceSmeltProgress = 0
-                queuedSmeltCount -= 1
-                foodInventory[.cookedMutton] = foodCount(for: .cookedMutton) + 1
-                SoundEngine.shared.play(.eat)
-                statusMessage = "Furnace smelted +1 Cooked Mutton"
-            }
-        }
-    }
-
-    private func stepFallingBlocks() {
-        for coord in blocks.keys.sorted(by: { $0.y < $1.y }) {
-            guard let b = blocks[coord], b.obeysGravity, coord.y > 1 else { continue }
-            let below = BlockCoord(x: coord.x, y: coord.y - 1, z: coord.z)
-            if blocks[below] == nil {
-                removeBlockInternal(coord: coord)
-                setBlockInternal(coord: below, type: b, markModified: true)
-            }
-        }
-    }
-
-    private func stepFlowingWater() {
-        let waterCoords = blocks.filter { $0.value == .water }.map { $0.key }.prefix(40)
-        let dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-        for coord in waterCoords {
-            let below = BlockCoord(x: coord.x, y: coord.y - 1, z: coord.z)
-            if blocks[below] == nil && coord.y > 1 {
-                setBlockInternal(coord: below, type: .water, markModified: false)
-                continue
-            }
-            for (dx, dz) in dirs {
-                let side = BlockCoord(x: coord.x + dx, y: coord.y, z: coord.z + dz)
-                let support = BlockCoord(x: side.x, y: side.y - 1, z: side.z)
-                if blocks[side] == nil && blocks[support] != nil && blocks[support] != .water {
-                    setBlockInternal(coord: side, type: .water, markModified: false)
-                    break
-                }
-            }
-        }
-    }
-
-    private func isCropHydrated(at crop: BlockCoord) -> Bool {
-        // A water source within four horizontal blocks hydrates the crop,
-        // provided it is no more than one block above or below the crop.
-        for dx in -4...4 {
-            for dz in -4...4 {
-                guard abs(dx) + abs(dz) <= 4 else { continue }
-                for dy in -1...1 {
-                    let water = BlockCoord(x: crop.x + dx, y: crop.y + dy, z: crop.z + dz)
-                    if blocks[water] == .water { return true }
-                }
-            }
-        }
-        return false
-    }
-
-    private func stepCropGrowth() {
-        cropGrowthCycle += 1
-        for (coord, type) in blocks where type == .crop {
-            let currentStage = cropStages[coord] ?? 0
-            let hydrated = isCropHydrated(at: coord)
-            if let cropNode = blockNodes[coord] {
-                cropNode.geometry?.firstMaterial?.diffuse.contents = hydrated ? UIColor(red: 0.34, green: 0.72, blue: 0.24, alpha: 1.0) : UIColor(red: 0.48, green: 0.62, blue: 0.22, alpha: 1.0)
-                cropNode.geometry?.firstMaterial?.emission.contents = hydrated ? UIColor(red: 0.04, green: 0.10, blue: 0.02, alpha: 1.0) : UIColor.clear
-            }
-            guard currentStage < 3 else { continue }
-            // Hydrated crops grow on each 30-second world tick.
-            // Dry crops grow on every second tick.
-            let rainHydrated = weather == .rain && activeDimension == .overworld
-            guard hydrated || rainHydrated || cropGrowthCycle.isMultiple(of: 2) else { continue }
-            if weather == .snowstorm && !hydrated && !cropGrowthCycle.isMultiple(of: 3) { continue }
-            let stage = min(3, currentStage + 1)
-            cropStages[coord] = stage
-            if let cropNode = blockNodes[coord] {
-                cropNode.scale = SCNVector3(1.0, CGFloat(0.45 + Double(stage) * 0.22), 1.0)
-                let wetTint = hydrated ? UIColor(red: 0.34, green: 0.72, blue: 0.24, alpha: 1.0) : UIColor(red: 0.48, green: 0.62, blue: 0.22, alpha: 1.0)
-                cropNode.geometry?.firstMaterial?.diffuse.contents = wetTint
-                cropNode.geometry?.firstMaterial?.emission.contents = hydrated ? UIColor(red: 0.04, green: 0.10, blue: 0.02, alpha: 1.0) : UIColor.clear
-            }
-        }
-        saveWorld()
-    }
-
-    private func decayNearbyLeaves(around brokenCoord: BlockCoord) {
-        let logTypes: Set<BlockType> = [.wood, .spruceLog, .birchLog]
-        for dx in -3...3 {
-            for dy in -1...4 {
-                for dz in -3...3 {
-                    let c = BlockCoord(x: brokenCoord.x + dx, y: brokenCoord.y + dy, z: brokenCoord.z + dz)
-                    guard blocks[c] == .leaves else { continue }
-                    let hasNearbyLog = (-2...2).contains { lx in
-                        (-2...2).contains { ly in
-                            (-2...2).contains { lz in
-                                if let t = blocks[BlockCoord(x: c.x + lx, y: c.y + ly, z: c.z + lz)] { return logTypes.contains(t) }
-                                return false
-                            }
-                        }
-                    }
-                    if !hasNearbyLog {
-                        spawnBreakParticles(at: c, color: BlockType.leaves.particleColor)
-                        removeBlockInternal(coord: c)
-                        spawnDroppedItem(type: .leaves, at: c)
-                    }
-                }
-            }
-        }
-    }
-
-    private func collidesHorizontal(x: Float, z: Float, radius: Float, minY: Int, maxY: Int) -> Bool {
-        let minX = Int(floor(x - radius))
-        let maxX = Int(floor(x + radius))
-        let minZ = Int(floor(z - radius))
-        let maxZ = Int(floor(z + radius))
-        for bx in minX...maxX {
-            for by in minY...maxY {
-                for bz in minZ...maxZ {
-                    let c = BlockCoord(x: bx, y: by, z: bz)
-                    if let b = blocks[c], !b.isPassable {
-                        if b == .door && openDoors.contains(c) { continue }
-                        return true
-                    }
-                }
-            }
-        }
-        return false
-    }
-
-    // MARK: - LAN Sync Payloads
-
-    private func broadcastBlockEdit(coord: BlockCoord, type: BlockType?) {
-        guard multiplayerEnabled else { return }
+    private func sendPlayerState() {
         lanManager.send([
-            "kind": "block",
+            "type": "pos",
+            "x": playerPos.x,
+            "y": playerPos.y - 1.5,
+            "z": playerPos.z,
+            "yaw": yaw
+        ])
+    }
+
+    private func sendBlockDelta(coord: BlockCoord, type: BlockType?) {
+        lanManager.send([
+            "type": "block",
             "x": coord.x,
             "y": coord.y,
             "z": coord.z,
-            "type": type?.rawValue ?? ""
-        ])
-    }
-
-    private func broadcastPlayerPosition() {
-        lanManager.send([
-            "kind": "pos",
-            "x": Double(playerPos.x),
-            "y": Double(playerPos.y),
-            "z": Double(playerPos.z)
-        ])
-    }
-
-    private func broadcastMobSync(id: UUID, hp: Int) {
-        guard multiplayerEnabled else { return }
-        lanManager.send([
-            "kind": "mob",
-            "id": id.uuidString,
-            "hp": hp
+            "block": type?.rawValue ?? ""
         ])
     }
 
     private func handleNetworkData(_ data: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let kind = obj["kind"] as? String else { return }
-        if kind == "block",
-           let x = obj["x"] as? Int, let y = obj["y"] as? Int, let z = obj["z"] as? Int,
-           let typeStr = obj["type"] as? String {
-            let coord = BlockCoord(x: x, y: y, z: z)
-            if typeStr.isEmpty {
-                removeBlockInternal(coord: coord)
-            } else if let bt = BlockType(rawValue: typeStr) {
-                setBlockInternal(coord: coord, type: bt, markModified: true)
-            }
-            saveWorld()
-        } else if kind == "pos",
-                  let x = obj["x"] as? Double, let y = obj["y"] as? Double, let z = obj["z"] as? Double {
-            remotePeerNode.position = SCNVector3(Float(x), Float(y) - 1.5, Float(z))
+              let kind = obj["type"] as? String else { return }
+
+        if kind == "pos",
+           let x = obj["x"] as? Double,
+           let y = obj["y"] as? Double,
+           let z = obj["z"] as? Double,
+           let ryaw = obj["yaw"] as? Double {
             remotePeerNode.isHidden = false
-            statusMessage = "Peer at X:\(Int(x)) Y:\(Int(y)) Z:\(Int(z))"
-        } else if kind == "mob",
-                  let idStr = obj["id"] as? String, let uuid = UUID(uuidString: idStr),
-                  let hp = obj["hp"] as? Int,
-                  let idx = mobs.firstIndex(where: { $0.id == uuid }) {
-            if hp <= 0 {
-                mobs[idx].node.removeFromParentNode()
-                mobs.remove(at: idx)
-            } else {
-                mobs[idx].hp = hp
+            remotePeerNode.position = SCNVector3(Float(x), Float(y), Float(z))
+            remotePeerNode.eulerAngles = SCNVector3(0, Float(ryaw), 0)
+        } else if kind == "block",
+                  let x = obj["x"] as? Int,
+                  let y = obj["y"] as? Int,
+                  let z = obj["z"] as? Int,
+                  let raw = obj["block"] as? String {
+            let coord = BlockCoord(x: x, y: y, z: z)
+            if raw.isEmpty {
+                removeBlockInternal(at: coord, markModified: true)
+            } else if let bType = BlockType(rawValue: raw) {
+                setBlockInternal(coord: coord, type: bType, markModified: true)
             }
         }
-    }
-
-    // MARK: - Block & Mob Interaction
-
-    func handleTap(at point: CGPoint, in scnView: SCNView) {
-        let hits = scnView.hitTest(point, options: [.searchMode: SCNHitTestSearchMode.closest.rawValue])
-
-        if let mobHit = hits.first(where: { $0.node.name?.hasPrefix("mob_") == true || $0.node.parent?.name?.hasPrefix("mob_") == true }) {
-            let rawName = mobHit.node.name?.hasPrefix("mob_") == true ? mobHit.node.name! : (mobHit.node.parent?.name ?? "")
-            let uuidStr = String(rawName.dropFirst(4))
-            if let uuid = UUID(uuidString: uuidStr), let idx = mobs.firstIndex(where: { $0.id == uuid }) {
-                let mob = mobs[idx]
-                if mob.isTamed && [.wolf, .fox, .bear].contains(mob.kind) {
-                    if !mob.isSitting && !mob.isGuarding {
-                        mob.isSitting = true
-                        mob.isGuarding = false
-                        mob.guardPosition = nil
-                        statusMessage = "\(mob.kind.rawValue) is sitting"
-                    } else if mob.isSitting {
-                        mob.isSitting = false
-                        mob.isGuarding = true
-                        mob.guardPosition = mob.position
-                        unlockAchievement("watchful_companion")
-                        statusMessage = "\(mob.kind.rawValue) is guarding this spot"
-                    } else {
-                        mob.isSitting = false
-                        mob.isGuarding = false
-                        mob.guardPosition = nil
-                        statusMessage = "\(mob.kind.rawValue) will follow you"
-                    }
-                    saveWorld()
-                    return
-                }
-                if tameCompanion(mob) { return }
-                if feedAnimal(mob) { return }
-                if mob.kind == .villager {
-                    let distance = simd_length(SIMD2<Float>(mob.position.x - playerPos.x, mob.position.z - playerPos.z))
-                    guard distance <= 5.0 else { statusMessage = "Move closer to the Villager to trade"; return }
-                    activeVillagerID = mob.id
-                    showVillagerTradeSheet = true
-                    statusMessage = "Trading with \(mob.profession.rawValue) Villager"
-                    return
-                }
-                let weaponCondition = gameMode == .survival && toolDurability == 0 ? 0.5 : 1.0
-                let sharpnessBonus = enchantmentLevel(.sharpness) * 2
-                let strengthBonus = (activePotionEffects[.strength] ?? 0) > 0 ? 5 : 0
-                let criticalBonus = verticalVelocity < -1.0 ? 3 : 0
-                mob.hp -= max(1, Int(Double(selectedTool.attackDamage + sharpnessBonus + strengthBonus + criticalBonus + (toolTier == .diamond ? 2 : (toolTier == .iron ? 1 : 0))) * weaponCondition))
-                if selectedTool == .sword || selectedTool == .axe { damageTool() }
-                saveWorld()
-                broadcastMobSync(id: mob.id, hp: mob.hp)
-                let pushDir = simd_normalize(SIMD2<Float>(mob.position.x - playerPos.x, mob.position.z - playerPos.z))
-                if simd_length(pushDir) > 0.01 {
-                    mob.knockback += pushDir * 6.5
-                    mob.velocityY = max(mob.velocityY, 3.8)
-                }
-                SoundEngine.shared.play(.hitMob)
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                if mob.hp <= 0 {
-                    mob.node.removeFromParentNode()
-                    mobs.remove(at: idx)
-                    let mobXP = mob.kind == .enderDragon ? 80 : ([MobKind.zombie, .skeleton, .creeper, .enderman, .slime, .spider, .blaze].contains(mob.kind) ? 6 : 2)
-                    awardExperience(mobXP, at: mob.position)
-                    if [.zombie, .skeleton, .creeper, .enderman, .slime, .spider, .blaze, .enderDragon, .guardian].contains(mob.kind) {
-                        defeatedHostileCount += 1
-                        unlockAchievement("first_blood")
-                        if defeatedHostileCount >= 10 { unlockAchievement("monster_hunter") }
-                    }
-                    if mob.isElderGuardian {
-                        unlockAchievement("monument_conqueror")
-                        _ = addItems(Int.random(in: 5...8), of: .prismarine)
-                        _ = addItems(Int.random(in: 2...4), of: .seaLantern)
-                        _ = addItems(Int.random(in: 2...3), of: .amethyst)
-                        experiencePoints += 35
-                        statusMessage = "ELDER GUARDIAN DEFEATED · Monument treasure secured!"
-                    }
-                    if mob.kind == .enderDragon {
-                        unlockAchievement("dragon_slayer")
-                        _ = addItems(12, of: .amethyst)
-                        _ = addItems(8, of: .glowstone)
-                        experiencePoints += 120
-                        statusMessage = "ENDER DRAGON DEFEATED · Legendary loot recovered!"
-                    } else if mob.kind == .blaze {
-                        _ = addItems(Int.random(in: 1...3), of: .glowstone)
-                        statusMessage = "Blaze defeated · Glowstone dropped"
-                    } else if mob.kind == .spider {
-                        _ = addItems(1, of: .wool)
-                        statusMessage = "Spider defeated · Fibre collected"
-                    }
-                    if mob.kind == .sheep {
-                        _ = addItems(2, of: .wool)
-                        foodInventory[.rawMutton, default: 0] += 1
-                        statusMessage = "Sheep dropped Wool and Raw Mutton"
-                    } else if mob.kind == .pig {
-                        foodInventory[.rawPork, default: 0] += 2
-                        statusMessage = "Pig dropped 2 Raw Porkchops"
-                    } else if mob.kind == .cow {
-                        foodInventory[.rawBeef, default: 0] += 2
-                        statusMessage = "Cow dropped 2 Raw Beef"
-                    } else if mob.kind == .chicken {
-                        foodInventory[.rawChicken, default: 0] += 1
-                        foodInventory[.seeds, default: 0] += 1
-                        statusMessage = "Chicken dropped Raw Chicken and Seeds"
-                    } else if mob.kind == .guardian {
-                        _ = addItems(Int.random(in: 2...4), of: .prismarine)
-                        _ = addItems(Int.random(in: 1...2), of: .seaLantern)
-                        statusMessage = "Guardian defeated · Prismarine and sea lantern recovered"
-                    } else if mob.kind == .fish {
-                        foodInventory[.rawFish, default: 0] += 1
-                        statusMessage = "Fish dropped Raw Fish"
-                    } else if mob.kind == .dolphin {
-                        foodInventory[.rawFish, default: 0] += 2
-                        statusMessage = "Dolphin dropped 2 Raw Fish"
-                    } else if mob.kind == .turtle {
-                        statusMessage = "Turtle returned to the ocean"
-                    } else if ![MobKind.enderDragon, .blaze, .spider, .wolf, .fox, .bear].contains(mob.kind) {
-                        _ = addItems(3, of: .emeraldOre)
-                        statusMessage = "Defeated \(mob.kind.rawValue) (+3 EmeraldOre)"
-                    }
-                } else {
-                    statusMessage = "Hit \(mob.kind.rawValue) with \(toolTier.rawValue) \(selectedTool.rawValue) (\(mob.hp) HP left)"
-                }
-                return
-            }
-        }
-
-        guard let hit = hits.first(where: { $0.node !== highlightNode && $0.node.name?.hasPrefix("block_") == true }) else {
-            highlightNode.isHidden = true
-            if selectedTool == .fishingRod { statusMessage = "Aim at a water block to fish" }
-            return
-        }
-
-        let targetCoord = BlockCoord.from(worldPosition: hit.node.position)
-        highlightNode.position = targetCoord.scnVector
-        highlightNode.isHidden = false
-
-        let haptic = UIImpactFeedbackGenerator(style: .light)
-
-        if let hitType = blocks[targetCoord] {
-            if hitType == .water && selectedTool == .fishingRod {
-                castFishingRod(at: targetCoord)
-                return
-            }
-            if hitType == .portal { selectDimension(activeDimension.nextDimension); return }
-            if hitType == .obsidian && tryIgniteObsidianFrame(around: targetCoord) { return }
-            if hitType == .crop {
-                let stage = cropStages[targetCoord] ?? 0
-                if stage >= 3 {
-                    cropStages[targetCoord] = 0
-                    blockNodes[targetCoord]?.scale = SCNVector3(1.0, 0.45, 1.0)
-                    let yieldCount = stage >= 3 ? 3 : 1
-                    foodInventory[.wheat, default: 0] += yieldCount
-                    foodInventory[.seeds, default: 0] += Int.random(in: 1...2)
-                    saveWorld()
-                    SoundEngine.shared.play(.pickup)
-                    statusMessage = "Harvested Wheat (+\(yieldCount) Wheat and Seeds)"
-                } else {
-                    statusMessage = "Crop growing (stage \(stage)/3)"
-                }
-                return
-            }
-            if hitType == .button {
-                activeButtons[targetCoord] = ProcessInfo.processInfo.systemUptime + 1.5
-                recalculateRedstoneCircuits(around: targetCoord)
-                statusMessage = "Button pressed — signal active"
-                saveWorld()
-                return
-            }
-            if hitType == .lever {
-                if activeLevers.contains(targetCoord) {
-                    activeLevers.remove(targetCoord)
-                    blockNodes[targetCoord]?.eulerAngles.z = 0
-                    recalculateRedstoneCircuits(around: targetCoord)
-                    statusMessage = "Lever OFF — depowered circuit"
-                } else {
-                    activeLevers.insert(targetCoord)
-                    blockNodes[targetCoord]?.eulerAngles.z = .pi / 4
-                    SoundEngine.shared.play(.piston)
-                    recalculateRedstoneCircuits(around: targetCoord)
-                    statusMessage = "Lever ON — powered redstone & pistons"
-                }
-                saveWorld()
-                return
-            }
-            if hitType == .bed && activeTool == .place {
-                customSpawnCoord = targetCoord
-                if isNightMode {
-                    let unsafeHostiles = mobs.contains { mob in
-                        let hostile = [.zombie, .skeleton, .creeper, .spider, .blaze, .enderman, .slime].contains(mob.kind)
-                        guard hostile else { return false }
-                        let dx = mob.position.x - Float(targetCoord.x)
-                        let dz = mob.position.z - Float(targetCoord.z)
-                        return dx * dx + dz * dz < 64
-                    }
-                    guard !unsafeHostiles else {
-                        statusMessage = "You cannot sleep while hostile mobs are nearby"
-                        saveWorld()
-                        return
-                    }
-                    isNightMode = false
-                    dayClockTimer = 0
-                    health = min(20, health + 4)
-                    hunger = min(20, hunger + 2)
-                    oxygen = 10
-                    stamina = 100
-                    statusMessage = "Slept until morning · spawn saved · rested"
-                } else {
-                    statusMessage = "Respawn point saved at Bed"
-                }
-                saveWorld()
-                SoundEngine.shared.play(.place)
-                return
-            }
-            if hitType == .furnace && activeTool == .place {
-                showCraftSheet = true
-                statusMessage = "Opened Furnace & Crafting"
-                return
-            }
-            if hitType == .chest {
-                openChest(at: targetCoord)
-                SoundEngine.shared.play(.place)
-                return
-            }
-            if hitType == .door && activeTool == .place {
-                if openDoors.contains(targetCoord) {
-                    openDoors.remove(targetCoord)
-                    redstoneToggledDoors.remove(targetCoord)
-                    blockNodes[targetCoord]?.eulerAngles.y = 0
-                    statusMessage = "Closed Door"
-                } else {
-                    openDoors.insert(targetCoord)
-                    blockNodes[targetCoord]?.eulerAngles.y = .pi / 2
-                    statusMessage = "Opened Door"
-                }
-                saveWorld()
-                haptic.impactOccurred()
-                return
-            }
-            if hitType == .tnt && activeTool == .place {
-                detonateTNT(at: targetCoord)
-                return
-            }
-        }
-
-        switch activeTool {
-        case .breakBlock:
-            if targetCoord.y > 0, let removedType = blocks[targetCoord] {
-                if removedType == .bedrock || !removedType.miningHardness.isFinite {
-                    statusMessage = "This block cannot be mined"
-                    miningProgress = 0
-                    miningTarget = nil
-                    return
-                }
-                if gameMode == .survival {
-                    let requiresIronPickaxe: Set<BlockType> = [.ironOre, .goldOre, .diamondOre, .emeraldOre, .redstoneOre]
-                    let requiresDiamondPickaxe: Set<BlockType> = [.obsidian]
-                    if (requiresIronPickaxe.contains(removedType) || requiresDiamondPickaxe.contains(removedType)) && selectedTool != .pickaxe {
-                        statusMessage = "Requires a pickaxe to harvest \(removedType.rawValue)"
-                        miningProgress = 0; miningTarget = nil
-                        return
-                    }
-                    if requiresIronPickaxe.contains(removedType) && toolTier == .wood {
-                        statusMessage = "Requires an Iron-tier or better pickaxe"
-                        miningProgress = 0; miningTarget = nil
-                        return
-                    }
-                    if requiresDiamondPickaxe.contains(removedType) && toolTier != .diamond {
-                        statusMessage = "Requires a Diamond pickaxe"
-                        miningProgress = 0; miningTarget = nil
-                        return
-                    }
-                }
-                if miningTarget != targetCoord {
-                    miningTarget = targetCoord
-                    miningProgress = 0
-                }
-                if gameMode == .creative {
-                    miningProgress = 1
-                } else {
-                    miningProgress = min(1, miningProgress + miningPower(for: removedType) * 0.34)
-                }
-                if miningProgress < 1 {
-                    statusMessage = "Mining \(removedType.rawValue): \(Int(miningProgress * 100))%"
-                    SoundEngine.shared.play(.mine)
-                    return
-                }
-                spawnBreakParticles(at: targetCoord, color: removedType.particleColor)
-                removeBlockInternal(coord: targetCoord)
-                spawnDroppedItem(type: removedType, at: targetCoord)
-                let oreXP: Int
-                switch removedType {
-                case .coalOre: oreXP = 2
-                case .redstoneOre, .quartzOre: oreXP = 3
-                case .diamondOre, .emeraldOre: oreXP = 5
-                default: oreXP = 0
-                }
-                if oreXP > 0 { awardExperience(oreXP, at: SIMD3<Float>(Float(targetCoord.x) + 0.5, Float(targetCoord.y) + 0.5, Float(targetCoord.z) + 0.5)) }
-                if removedType == .wood || removedType == .spruceLog || removedType == .birchLog {
-                    decayNearbyLeaves(around: targetCoord)
-                }
-                damageTool()
-                placedOrMinedCount += 1
-                miningProgress = 0
-                miningTarget = nil
-                saveWorld()
-                broadcastBlockEdit(coord: targetCoord, type: nil)
-                SoundEngine.shared.play(.mine)
-                haptic.impactOccurred()
-                statusMessage = "Mined \(removedType.rawValue) • Tool: \(toolDurability)/\(toolTier.maxDurability)"
-            } else {
-                statusMessage = "Cannot break bedrock"
-                miningProgress = 0
-                miningTarget = nil
-            }
-
-        case .place:
-            let stock = count(for: selectedBlock)
-            if gameMode == .survival && stock <= 0 {
-                statusMessage = "Out of \(selectedBlock.rawValue) — craft or mine more"
-                return
-            }
-
-            let normal = hit.worldNormal
-            let placeCoord = BlockCoord(
-                x: targetCoord.x + Int(round(normal.x)),
-                y: targetCoord.y + Int(round(normal.y)),
-                z: targetCoord.z + Int(round(normal.z))
-            )
-
-            let playerFeetCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 1.5)), z: Int(floor(playerPos.z)))
-            let playerHeadCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 0.3)), z: Int(floor(playerPos.z)))
-
-            if !selectedBlock.isPassable && (placeCoord == playerFeetCoord || placeCoord == playerHeadCoord) {
-                statusMessage = "Step back slightly to place block there"
-                return
-            }
-
-            if blocks[placeCoord] == nil {
-                setBlockInternal(coord: placeCoord, type: selectedBlock, markModified: true)
-                if selectedBlock == .crop { cropStages[placeCoord] = 0 }
-                if gameMode == .survival {
-                    inventory[selectedBlock] = max(0, stock - 1)
-                }
-                placedOrMinedCount += 1
-                saveWorld()
-                broadcastBlockEdit(coord: placeCoord, type: selectedBlock)
-                SoundEngine.shared.play(.place)
-                haptic.impactOccurred()
-                statusMessage = "Placed \(selectedBlock.rawValue)"
-
-                if [.redstoneDust, .repeater, .redstoneLamp, .pressurePlate, .button, .lever, .piston, .door].contains(selectedBlock) {
-                    recalculateRedstoneCircuits(around: placeCoord)
-                }
-            }
-        }
-    }
-
-    private func tryIgniteObsidianFrame(around coord: BlockCoord) -> Bool {
-        for dx in -1...1 {
-            for dy in -1...1 {
-                for dz in -1...1 {
-                    let cand = BlockCoord(x: coord.x + dx, y: coord.y + dy, z: coord.z + dz)
-                    if blocks[cand] == nil && cand.y > 0 {
-                        let touchesObsidian = [
-                            BlockCoord(x: cand.x + 1, y: cand.y, z: cand.z), BlockCoord(x: cand.x - 1, y: cand.y, z: cand.z),
-                            BlockCoord(x: cand.x, y: cand.y + 1, z: cand.z), BlockCoord(x: cand.x, y: cand.y - 1, z: cand.z),
-                            BlockCoord(x: cand.x, y: cand.y, z: cand.z + 1), BlockCoord(x: cand.x, y: cand.y, z: cand.z - 1)
-                        ].contains { blocks[$0] == .obsidian }
-
-                        if touchesObsidian {
-                            setBlockInternal(coord: cand, type: .portal, markModified: true)
-                            saveWorld()
-                            broadcastBlockEdit(coord: cand, type: .portal)
-                            SoundEngine.shared.play(.portal)
-                            statusMessage = "Ignited Obsidian Portal!"
-                            return true
-                        }
-                    }
-                }
-            }
-        }
-        return false
-    }
-
-    private func poweredCoordsFromActiveLevers() -> Set<BlockCoord> {
-        var powered: Set<BlockCoord> = []
-        let dirs = [
-            BlockCoord(x: 1, y: 0, z: 0), BlockCoord(x: -1, y: 0, z: 0),
-            BlockCoord(x: 0, y: 1, z: 0), BlockCoord(x: 0, y: -1, z: 0),
-            BlockCoord(x: 0, y: 0, z: 1), BlockCoord(x: 0, y: 0, z: -1)
-        ]
-        for lever in activeLevers.union(activePressurePlates).union(Set(activeButtons.keys)) {
-            powered.insert(lever)
-            var queue: [BlockCoord] = [lever]
-            while !queue.isEmpty {
-                let cur = queue.removeFirst()
-                for off in dirs {
-                    let nb = BlockCoord(x: cur.x + off.x, y: cur.y + off.y, z: cur.z + off.z)
-                    if powered.contains(nb) { continue }
-                    if let t = blocks[nb] {
-                        powered.insert(nb)
-                        if (t == .redstoneDust || t == .repeater) && powered.count < 48 {
-                            queue.append(nb)
-                        }
-                    }
-                }
-            }
-        }
-        return powered
-    }
-
-    private func updateRedstoneSensors(at time: TimeInterval) {
-        var nextPressed: Set<BlockCoord> = []
-        for (coord, type) in blocks where type == .pressurePlate {
-            let center = SIMD3<Float>(Float(coord.x) + 0.5, Float(coord.y), Float(coord.z) + 0.5)
-            let playerOnPlate = abs(playerPos.y - center.y) < 2.0 &&
-                abs(playerPos.x - center.x) < 0.72 && abs(playerPos.z - center.z) < 0.72
-            let mobOnPlate = mobs.contains { mob in
-                abs(mob.position.y - center.y) < 1.5 &&
-                abs(mob.position.x - center.x) < 0.72 && abs(mob.position.z - center.z) < 0.72
-            }
-            if playerOnPlate || mobOnPlate { nextPressed.insert(coord) }
-        }
-        let expired = activeButtons.filter { $0.value <= time }.map(\.key)
-        for coord in expired { activeButtons.removeValue(forKey: coord) }
-        if nextPressed != activePressurePlates || !expired.isEmpty {
-            let changed = activePressurePlates.symmetricDifference(nextPressed)
-            activePressurePlates = nextPressed
-            for coord in changed {
-                blockNodes[coord]?.scale = nextPressed.contains(coord)
-                    ? SCNVector3(1.0, 0.55, 1.0)
-                    : SCNVector3(1.0, 1.0, 1.0)
-            }
-            recalculateRedstoneCircuits(around: nextPressed.first ?? BlockCoord(x: 0, y: 0, z: 0))
-        }
-    }
-
-    private func recalculateRedstoneCircuits(around origin: BlockCoord) {
-        let powered = poweredCoordsFromActiveLevers()
-        poweredRedstoneLamps.removeAll()
-        for (coord, type) in blocks where type == .redstoneLamp {
-            blockNodes[coord]?.childNodes.filter { $0.name == "powered_lamp_glow" }.forEach { $0.removeFromParentNode() }
-        }
-
-        for doorCoord in Array(redstoneToggledDoors) {
-            let touchesPower = [
-                BlockCoord(x: doorCoord.x + 1, y: doorCoord.y, z: doorCoord.z), BlockCoord(x: doorCoord.x - 1, y: doorCoord.y, z: doorCoord.z),
-                BlockCoord(x: doorCoord.x, y: doorCoord.y + 1, z: doorCoord.z), BlockCoord(x: doorCoord.x, y: doorCoord.y - 1, z: doorCoord.z),
-                BlockCoord(x: doorCoord.x, y: doorCoord.y, z: doorCoord.z + 1), BlockCoord(x: doorCoord.x, y: doorCoord.y, z: doorCoord.z - 1)
-            ].contains { powered.contains($0) }
-            if !touchesPower {
-                redstoneToggledDoors.remove(doorCoord)
-                openDoors.remove(doorCoord)
-                blockNodes[doorCoord]?.eulerAngles.y = 0
-            }
-        }
-
-        let dirs = [(1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1)]
-        for pCoord in Array(extendedPistons) {
-            let pPowered = [
-                BlockCoord(x: pCoord.x + 1, y: pCoord.y, z: pCoord.z), BlockCoord(x: pCoord.x - 1, y: pCoord.y, z: pCoord.z),
-                BlockCoord(x: pCoord.x, y: pCoord.y, z: pCoord.z + 1), BlockCoord(x: pCoord.x, y: pCoord.y, z: pCoord.z - 1)
-            ].contains { powered.contains($0) }
-            if !pPowered {
-                extendedPistons.remove(pCoord)
-                for (dx, dy, dz) in dirs {
-                    let front = BlockCoord(x: pCoord.x + dx, y: pCoord.y + dy, z: pCoord.z + dz)
-                    if blocks[front] == nil {
-                        for step in 2...4 {
-                            let src = BlockCoord(x: pCoord.x + dx * step, y: pCoord.y + dy * step, z: pCoord.z + dz * step)
-                            let dst = BlockCoord(x: pCoord.x + dx * (step - 1), y: pCoord.y + dy * (step - 1), z: pCoord.z + dz * (step - 1))
-                            if let m = blocks[src], blocks[dst] == nil {
-                                removeBlockInternal(coord: src)
-                                setBlockInternal(coord: dst, type: m, markModified: true)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for pCoord in powered {
-            for (dx, dy, dz) in [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)] {
-                let nb = BlockCoord(x: pCoord.x + dx, y: pCoord.y + dy, z: pCoord.z + dz)
-                guard let nbType = blocks[nb] else { continue }
-                if nbType == .redstoneLamp {
-                    poweredRedstoneLamps.insert(nb)
-                    if let node = blockNodes[nb] {
-                        node.childNodes.filter { $0.name == "powered_lamp_glow" }.forEach { $0.removeFromParentNode() }
-                        let glow = SCNNode()
-                        glow.name = "powered_lamp_glow"
-                        let light = SCNLight(); light.type = .omni; light.intensity = 520
-                        light.attenuationEndDistance = 7
-                        light.color = UIColor(red: 1.0, green: 0.72, blue: 0.28, alpha: 1)
-                        glow.light = light; node.addChildNode(glow)
-                    }
-                } else if nbType == .tnt {
-                    detonateTNT(at: nb)
-                    return
-                } else if nbType == .door && !openDoors.contains(nb) {
-                    openDoors.insert(nb)
-                    redstoneToggledDoors.insert(nb)
-                    blockNodes[nb]?.eulerAngles.y = .pi / 2
-                } else if nbType == .piston && !extendedPistons.contains(nb) {
-                    pushChain(from: nb, dx: dx, dy: dy, dz: dz)
-                }
-            }
-        }
-        _ = origin
-    }
-
-    private func pushChain(from pistonCoord: BlockCoord, dx: Int, dy: Int, dz: Int) {
-        let maxPush = 4
-        var chain: [(BlockCoord, BlockType)] = []
-        for step in 1...maxPush {
-            let c = BlockCoord(x: pistonCoord.x + dx * step, y: pistonCoord.y + dy * step, z: pistonCoord.z + dz * step)
-            guard let t = blocks[c] else { break }
-            if t == .bedrock || t == .obsidian { return }
-            chain.append((c, t))
-        }
-        guard !chain.isEmpty else { return }
-        let last = chain.last!.0
-        let dest = BlockCoord(x: last.x + dx, y: last.y + dy, z: last.z + dz)
-        guard blocks[dest] == nil else { return }
-
-        for (c, t) in chain.reversed() {
-            let target = BlockCoord(x: c.x + dx, y: c.y + dy, z: c.z + dz)
-            removeBlockInternal(coord: c)
-            setBlockInternal(coord: target, type: t, markModified: true)
-        }
-        extendedPistons.insert(pistonCoord)
-        SoundEngine.shared.play(.piston)
-    }
-
-    private func detonateTNT(at center: BlockCoord) {
-        SoundEngine.shared.play(.explode)
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-
-        for dx in -1...1 {
-            for dy in -1...1 {
-                for dz in -1...1 {
-                    let target = BlockCoord(x: center.x + dx, y: center.y + dy, z: center.z + dz)
-                    if target.y > 0, let existing = blocks[target], existing != .bedrock {
-                        spawnBreakParticles(at: target, color: existing.particleColor)
-                        removeBlockInternal(coord: target)
-                        broadcastBlockEdit(coord: target, type: nil)
-                    }
-                }
-            }
-        }
-        saveWorld()
-        statusMessage = "TNT exploded!"
     }
 }
 
-// MARK: - SceneKit View Bridge
+private extension SCNVector3 {
+    var simd: SIMD3<Float> { SIMD3<Float>(x, y, z) }
+}
+
+// MARK: - SceneKit Touch & Gesture View
 
 struct VoxelSceneView: UIViewRepresentable {
     @ObservedObject var controller: VoxelWorldController
@@ -6311,8 +5841,9 @@ struct VoxelSceneView: UIViewRepresentable {
         view.pointOfView = controller.cameraNode
         view.delegate = controller
         view.isPlaying = true
-        view.loops = true
-        view.antialiasingMode = .multisampling2X
+        view.rendersContinuously = true
+        view.antialiasingMode = .none
+        view.allowsCameraControl = false
         view.backgroundColor = UIColor(red: 0.53, green: 0.78, blue: 0.98, alpha: 1.0)
 
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
@@ -6322,7 +5853,11 @@ struct VoxelSceneView: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         view.addGestureRecognizer(tap)
 
-        context.coordinator.scnView = view
+        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        longPress.minimumPressDuration = 0.42
+        view.addGestureRecognizer(longPress)
+
+        context.coordinator.sceneView = view
         return view
     }
 
@@ -6332,984 +5867,731 @@ struct VoxelSceneView: UIViewRepresentable {
 
     final class Coordinator: NSObject {
         let controller: VoxelWorldController
-        weak var scnView: SCNView?
+        weak var sceneView: SCNView?
         private var lastPanPoint: CGPoint?
 
         init(controller: VoxelWorldController) { self.controller = controller }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
-            let loc = gesture.location(in: gesture.view)
+            let pt = gesture.location(in: gesture.view)
             switch gesture.state {
-            case .began: lastPanPoint = loc
+            case .began: lastPanPoint = pt
             case .changed:
                 if let prev = lastPanPoint {
-                    controller.lookDelta(deltaX: Float(loc.x - prev.x), deltaY: Float(loc.y - prev.y))
+                    controller.rotateCamera(deltaX: Float(pt.x - prev.x), deltaY: Float(pt.y - prev.y))
                 }
-                lastPanPoint = loc
+                lastPanPoint = pt
             default: lastPanPoint = nil
             }
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
-            guard let view = scnView else { return }
-            controller.handleTap(at: gesture.location(in: view), in: view)
+            guard gesture.state == .ended else { return }
+            let pt = gesture.location(in: sceneView)
+            controller.handleWorldTap(at: pt, in: sceneView!)
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began else { return }
+            let pt = gesture.location(in: sceneView)
+            let prevTool = controller.activeTool
+            controller.activeTool = .breakBlock
+            _ = controller.performPrimaryAction(at: pt, in: sceneView)
+            controller.activeTool = prevTool
         }
     }
 }
 
-// MARK: - Inventory & Equipment
+// MARK: - Virtual D-Pad Joystick
 
-enum ChestTransferChoice: CaseIterable, Hashable {
-    case one, half, all
-    var title: String {
-        switch self { case .one: return "1"; case .half: return "½"; case .all: return "All" }
-    }
-}
-
-struct ChestItemStack: Identifiable {
-    let type: BlockType
-    let count: Int
-    var id: String { type.rawValue }
-}
-
-struct ChestStorageSheetView: View {
-    @ObservedObject var world: VoxelWorldController
-    let chestKey: String
-    @Environment(\.dismiss) private var dismiss
-
-    private var playerItems: [ChestItemStack] {
-        BlockType.allCases.compactMap { type in
-            let amount = world.count(for: type)
-            return amount > 0 ? ChestItemStack(type: type, count: amount) : nil
-        }.sorted { $0.type.rawValue < $1.type.rawValue }
-    }
-
-    private var storedItems: [ChestItemStack] {
-        world.chestItems(for: chestKey).map { ChestItemStack(type: $0.0, count: $0.1) }
-    }
-    private var usedSlots: Int { storedItems.count }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack {
-                        Text("Storage slots")
-                        Spacer()
-                        Text("\(usedSlots) / 27").font(.system(.body, design: .monospaced).bold())
-                    }
-                }
-                Section("Chest contents") {
-                    Text("Drop an inventory stack here to deposit it")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .dropDestination(for: String.self) { payloads, _ in
-                            handleDrop(payloads, intoChest: true)
-                        }
-                    if storedItems.isEmpty {
-                        Text("This chest is empty.").foregroundStyle(.secondary)
-                    }
-                    ForEach(storedItems) { item in
-                        HStack(spacing: 8) {
-                            Image(uiImage: item.type.previewImage).interpolation(.none).resizable().frame(width: 28, height: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.type.rawValue)
-                                Text("\(item.count) / 64").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            transferButtons(type: item.type, count: item.count, toChest: false)
-                        }
-                        .draggable("chest:\(item.type.rawValue)")
-                    }
-                }
-                Section("Your inventory") {
-                    Text("Drop a chest stack here to withdraw it")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .dropDestination(for: String.self) { payloads, _ in
-                            handleDrop(payloads, intoChest: false)
-                        }
-                    if playerItems.isEmpty {
-                        Text("Your inventory is empty.").foregroundStyle(.secondary)
-                    }
-                    ForEach(playerItems) { item in
-                        HStack(spacing: 8) {
-                            Image(uiImage: item.type.previewImage).interpolation(.none).resizable().frame(width: 28, height: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.type.rawValue)
-                                Text("\(item.count) / 64").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            transferButtons(type: item.type, count: item.count, toChest: true)
-                        }
-                        .draggable("player:\(item.type.rawValue)")
-                    }
-                }
-            }
-            .navigationTitle("Chest")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
-    }
-
-    private func handleDrop(_ payloads: [String], intoChest: Bool) -> Bool {
-        guard let payload = payloads.first else { return false }
-        let parts = payload.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2, let type = BlockType(rawValue: parts[1]) else { return false }
-        if intoChest, parts[0] == "player" {
-            world.transferToChest(type, amount: world.count(for: type), chestKey: chestKey)
-            return true
-        }
-        if !intoChest, parts[0] == "chest" {
-            let amount = world.chestItems(for: chestKey).first(where: { $0.0 == type })?.1 ?? 0
-            world.transferFromChest(type, amount: amount, chestKey: chestKey)
-            return true
-        }
-        return false
-    }
-
-    @ViewBuilder
-    private func transferButtons(type: BlockType, count: Int, toChest: Bool) -> some View {
-        HStack(spacing: 5) {
-            ForEach(ChestTransferChoice.allCases, id: \.self) { choice in
-                Button(choice.title) {
-                    let amount = world.transferAmount(for: count, choice: choice)
-                    if toChest { world.transferToChest(type, amount: amount, chestKey: chestKey) }
-                    else { world.transferFromChest(type, amount: amount, chestKey: chestKey) }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-        }
-    }
-}
-
-struct BrewingSheetView: View {
-    @ObservedObject var world: VoxelWorldController
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Brewing stand") {
-                    Text("Combine rare materials to brew useful survival potions. Healing is instant; other effects last for a limited time.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                }
-                Section("Recipes") {
-                    ForEach(PotionKind.allCases) { potion in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Label(potion.rawValue, systemImage: potion.symbol).font(.headline)
-                                Spacer()
-                                Text("Owned: \(world.potionCount(for: potion))").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Text(potion.ingredients.map { "\($0.0.rawValue) ×\($0.1)  (have \(world.count(for: $0.0)))" }.joined(separator: "  •  "))
-                                .font(.caption).foregroundStyle(.secondary)
-                            Button("Brew Potion") { world.brewPotion(potion) }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!world.canBrew(potion) || world.potionCount(for: potion) >= 64)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-            }
-            .navigationTitle("Brewing")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
-        .presentationDetents([.medium, .large])
-    }
-}
-
-struct InventorySheetView: View {
-    @ObservedObject var world: VoxelWorldController
-    @Environment(\.dismiss) private var dismiss
-
-    private var sortedBlocks: [BlockType] {
-        BlockType.allCases.filter { world.count(for: $0) > 0 }.sorted { $0.rawValue < $1.rawValue }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Experience") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Level \(world.experienceLevel)").font(.headline)
-                            Spacer()
-                            Text("\(world.experiencePoints) XP").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        }
-                        ProgressView(value: world.experienceProgress)
-                        Text("Collect glowing XP orbs from ore and defeated mobs.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Button { world.showEnchantingSheet = true } label: {
-                        Label("Open Enchanting Table", systemImage: "sparkles")
-                    }
-                }
-
-                Section("Game inventory • \(world.gameMode.rawValue)") {
-                    if sortedBlocks.isEmpty {
-                        Text("No blocks in your inventory yet.").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(sortedBlocks) { block in
-                            HStack(spacing: 10) {
-                                Image(uiImage: block.previewImage)
-                                    .interpolation(.none).resizable().frame(width: 30, height: 30)
-                                Text(block.rawValue)
-                                Spacer()
-                                Text("×\(world.count(for: block))")
-                                    .font(.system(.body, design: .monospaced).bold())
-                            }
-                        }
-                    }
-                }
-
-                Section("Food") {
-                    ForEach(FoodKind.allCases) { food in
-                        HStack {
-                            Text(food.rawValue)
-                            Spacer()
-                            Text("×\(world.foodCount(for: food))")
-                                .font(.system(.body, design: .monospaced).bold())
-                        }
-                    }
-                }
-
-                Section("Potions & active effects") {
-                    ForEach(PotionKind.allCases) { potion in
-                        HStack(spacing: 10) {
-                            Image(systemName: potion.symbol).foregroundStyle(.purple).frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(potion.rawValue)
-                                if let remaining = world.activePotionEffects[potion], remaining > 0 {
-                                    Text("Active · \(Int(remaining))s remaining").font(.caption).foregroundStyle(.green)
-                                }
-                            }
-                            Spacer()
-                            Text("×\(world.potionCount(for: potion))").font(.system(.body, design: .monospaced).bold())
-                            Button("Drink") { world.drinkPotion(potion) }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(world.potionCount(for: potion) == 0)
-                        }
-                    }
-                    LabeledContent("Shield", value: world.isShieldRaised ? "Raised" : "Lowered")
-                }
-
-                Section("Achievements · \(world.unlockedAchievements.count)/\(AchievementInfo.all.count)") {
-                    ForEach(AchievementInfo.all) { achievement in
-                        HStack(spacing: 10) {
-                            Image(systemName: achievement.symbol)
-                                .foregroundStyle(world.unlockedAchievements.contains(achievement.id) ? .yellow : .secondary)
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(achievement.title).font(.subheadline.bold())
-                                Text(achievement.detail).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: world.unlockedAchievements.contains(achievement.id) ? "checkmark.seal.fill" : "lock.fill")
-                                .foregroundStyle(world.unlockedAchievements.contains(achievement.id) ? .green : .secondary)
-                        }
-                    }
-                }
-
-                Section("Crafted equipment in bag") {
-                    let owned = EquipmentCraftCatalog.all.filter { world.equipmentCount(for: $0) > 0 }
-                    if owned.isEmpty {
-                        Text("No spare equipment. Craft tools or armour below.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(owned) { recipe in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(recipe.title).font(.subheadline.bold())
-                                    Text("Stack: \(world.equipmentCount(for: recipe))")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Button("Equip") { world.equipCraftedEquipment(recipe) }
-                                    .buttonStyle(.borderedProminent)
-                            }
-                        }
-                    }
-                }
-
-                Section("Craft tools & armour") {
-                    ForEach(EquipmentCraftCatalog.all) { recipe in
-                        HStack(alignment: .center, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(recipe.title).font(.subheadline.bold())
-                                Text(recipe.ingredients.map { "\($0.0.rawValue) ×\($0.1) (have \(world.count(for: $0.0)))" }.joined(separator: ", "))
-                                    .font(.caption).foregroundStyle(.secondary)
-                                Text("Owned: \(world.equipmentCount(for: recipe))")
-                                    .font(.caption2).foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 4)
-                            Button("Craft") { world.craftEquipment(recipe) }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!world.canCraftEquipment(recipe))
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-
-                Section("Currently equipped") {
-                    LabeledContent("Tool", value: "\(world.toolTier.rawValue) \(world.selectedTool.rawValue) · \(world.toolDurability)/\(world.toolTier.maxDurability)")
-                    LabeledContent("Helmet", value: "\(world.helmetTier.rawValue) · \(world.helmetDurability)")
-                    LabeledContent("Chestplate", value: "\(world.chestplateTier.rawValue) · \(world.chestplateDurability)")
-                    LabeledContent("Leggings", value: "\(world.leggingsTier.rawValue) · \(world.leggingsDurability)")
-                    LabeledContent("Boots", value: "\(world.bootsTier.rawValue) · \(world.bootsDurability)")
-                    LabeledContent("Armour protection", value: "\(world.effectiveArmorReduction)")
-                }
-            }
-            .navigationTitle("Inventory")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
-    }
-}
-
-struct EnchantingSheetView: View {
-    @ObservedObject var world: VoxelWorldController
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Your experience") {
-                    LabeledContent("Level", value: "\(world.experienceLevel)")
-                    LabeledContent("Total XP", value: "\(world.experiencePoints)")
-                }
-                Section("Available enchantments") {
-                    ForEach(EnchantmentKind.allCases) { kind in
-                        let level = world.enchantmentLevel(kind)
-                        let cost = world.enchantmentCost(kind)
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("\(kind.rawValue) \(level > 0 ? "\(level)" : "I")").font(.headline)
-                                Spacer()
-                                Text("Next cost: \(cost) levels").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Text(kind.description).font(.caption).foregroundStyle(.secondary)
-                            HStack {
-                                Text("Max level III").font(.caption2).foregroundStyle(.secondary)
-                                Spacer()
-                                Button(level >= kind.maximumLevel ? "MAXED" : "Enchant") {
-                                    world.applyEnchantment(kind)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!world.canEnchant(kind))
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-                Section("Active enchantments") {
-                    let active = EnchantmentKind.allCases.filter { world.enchantmentLevel($0) > 0 }
-                    if active.isEmpty {
-                        Text("No enchantments yet.").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(active) { kind in
-                            LabeledContent(kind.rawValue, value: "Level \(world.enchantmentLevel(kind))")
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Enchanting Table")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
-    }
-}
-
-// MARK: - Crafting, Smelting & Food Sheet
-
-struct CraftingSheetView: View {
-    @ObservedObject var world: VoxelWorldController
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Furnace Smelt Queue") {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Queued: \(world.queuedSmeltCount)  •  Burn: \(String(format: "%.1fs", world.furnaceBurnRemaining))")
-                                .font(.subheadline.bold())
-                            ProgressView(value: world.furnaceSmeltProgress)
-                        }
-                        Spacer()
-                        Button("Queue Smelt") {
-                            world.queueFurnaceSmelt()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-
-                Section("Food Pouch & Farming") {
-                    ForEach(FoodKind.allCases) { food in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(food.rawValue) ×\(world.foodCount(for: food))")
-                                    .font(.subheadline.bold())
-                                Text(food.isEdible ? "Restores +\(food.hungerRestore) Food, +\(food.healthRestore) HP" : (food.cookingResult == nil ? "Farming and breeding ingredient" : "Raw food • cook with CoalOre"))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if food.isEdible {
-                                Button("Eat") { world.eatFood(food) }
-                                    .buttonStyle(.bordered)
-                                    .disabled(world.foodCount(for: food) <= 0)
-                            } else if food.cookingResult != nil {
-                                Button("Cook") { world.cookFood(food) }
-                                    .buttonStyle(.bordered)
-                                    .disabled(world.foodCount(for: food) <= 0 || world.count(for: .coalOre) <= 0)
-                            }
-                        }
-                    }
-                    Button("Bake Bread (3 Wheat)") { world.bakeBread() }
-                        .disabled(world.foodCount(for: .wheat) < 3)
-                }
-
-                Section("Craft, Smelt & Cook") {
-                    ForEach(CraftCatalog.all) { recipe in
-                        let craftable = world.canCraft(recipe)
-                        HStack {
-                            Image(uiImage: recipe.output.previewImage)
-                                .interpolation(.none)
-                                .resizable()
-                                .frame(width: 34, height: 34)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(recipe.title)
-                                    .font(.subheadline.bold())
-                                Text(recipe.ingredients.map { "\($0.0.rawValue) ×\($0.1) (have \(world.count(for: $0.0)))" }.joined(separator: ", "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button("Craft") { world.craft(recipe) }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!craftable)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Craft, Smelt & Food")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-    }
-}
-
-struct VillagerTradeSheetView: View {
-    @ObservedObject var world: VoxelWorldController
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                if let villager = world.activeVillagerID.flatMap({ world.villager(for: $0) }) {
-                    Image(systemName: villager.profession.symbol)
-                        .font(.system(size: 42, weight: .semibold))
-                        .foregroundStyle(.orange)
-                    Text("\(villager.profession.rawValue) Villager")
-                        .font(.title2.bold())
-                    Text("Choose this villager's available trade.")
-                        .foregroundStyle(.secondary)
-                    let trade = world.villagerTradeDescription(for: villager.profession)
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("You give: \(trade.cost)", systemImage: "arrow.up.circle")
-                        Label("You receive: \(trade.reward)", systemImage: "arrow.down.circle")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
-                    Button {
-                        world.completeVillagerTrade()
-                    } label: {
-                        Label("Complete Trade", systemImage: "arrow.left.arrow.right")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                } else {
-                    ContentUnavailableView("Villager unavailable", systemImage: "person.crop.circle.badge.questionmark", description: Text("The villager may have moved or left the loaded area."))
-                }
-                Spacer(minLength: 0)
-            }
-            .padding()
-            .navigationTitle("Villager Trading")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
-        .presentationDetents([.medium])
-    }
-}
-
-// MARK: - HUD & Game UI
-
-struct VoxelGameView: View {
-    @StateObject private var world = VoxelWorldController()
+struct VirtualDPadView: View {
+    let onMoveChanged: (Float, Float) -> Void
+    @State private var thumbOffset: CGSize = .zero
+    private let radius: CGFloat = 44
 
     var body: some View {
         ZStack {
-            VoxelSceneView(controller: world)
+            Circle().fill(Color.black.opacity(0.36)).frame(width: radius * 2, height: radius * 2)
+                .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 1.5))
+            Image(systemName: "arrowtriangle.up.fill").font(.system(size: 9)).foregroundColor(.white.opacity(0.55)).offset(y: -radius + 10)
+            Image(systemName: "arrowtriangle.down.fill").font(.system(size: 9)).foregroundColor(.white.opacity(0.55)).offset(y: radius - 10)
+            Image(systemName: "arrowtriangle.left.fill").font(.system(size: 9)).foregroundColor(.white.opacity(0.55)).offset(x: -radius + 10)
+            Image(systemName: "arrowtriangle.right.fill").font(.system(size: 9)).foregroundColor(.white.opacity(0.55)).offset(x: radius - 10)
+            Circle().fill(Color.white.opacity(0.85)).frame(width: 34, height: 34).shadow(radius: 3).offset(thumbOffset)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let dx = value.translation.width, dy = value.translation.height
+                    let dist = sqrt(dx * dx + dy * dy)
+                    let clampedDist = min(dist, radius - 14)
+                    let angle = atan2(dy, dx)
+                    let nx = cos(angle) * clampedDist, ny = sin(angle) * clampedDist
+                    thumbOffset = CGSize(width: nx, height: ny)
+                    let normX = Float(nx / (radius - 14))
+                    let normZ = Float(-ny / (radius - 14))
+                    onMoveChanged(normX, normZ)
+                }
+                .onEnded { _ in
+                    thumbOffset = .zero
+                    onMoveChanged(0, 0)
+                }
+        )
+    }
+}
+
+// MARK: - Crafting Bench & Block Palette Sheets
+
+enum ChestTransferChoice { case one, half, all }
+
+struct ChestStorageSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedChoice: ChestTransferChoice = .one
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Picker("Transfer Amount", selection: $selectedChoice) {
+                        Text("1").tag(ChestTransferChoice.one)
+                        Text("Half").tag(ChestTransferChoice.half)
+                        Text("All").tag(ChestTransferChoice.all)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text("Chest Contents").font(.headline)
+                    let key = controller.activeChestKey ?? ""
+                    let stored = controller.chestItems(for: key)
+                    if stored.isEmpty {
+                        Text("Chest is empty").font(.caption).foregroundColor(.secondary)
+                    } else {
+                        ForEach(stored, id: \.0.id) { type, amount in
+                            HStack {
+                                Image(uiImage: type.previewImage).resizable().interpolation(.none).frame(width: 26, height: 26).cornerRadius(4)
+                                Text(type.rawValue).font(.subheadline.bold())
+                                Spacer()
+                                Text("×\(amount)").font(.subheadline.monospacedDigit())
+                                Button("Take") {
+                                    controller.transferFromChest(type, amount: controller.transferAmount(for: amount, choice: selectedChoice), chestKey: key)
+                                }
+                                .buttonStyle(.borderedProminent).controlSize(.small)
+                            }
+                            .padding(8).background(Color(.secondarySystemBackground)).cornerRadius(8)
+                        }
+                    }
+
+                    Text("Your Inventory").font(.headline)
+                    let owned = BlockType.allCases.filter { controller.count(for: $0) > 0 }
+                    if owned.isEmpty {
+                        Text("No blocks in inventory").font(.caption).foregroundColor(.secondary)
+                    } else {
+                        ForEach(owned) { type in
+                            let amount = controller.count(for: type)
+                            HStack {
+                                Image(uiImage: type.previewImage).resizable().interpolation(.none).frame(width: 26, height: 26).cornerRadius(4)
+                                Text(type.rawValue).font(.subheadline.bold())
+                                Spacer()
+                                Text("×\(amount)").font(.subheadline.monospacedDigit())
+                                Button("Store") {
+                                    controller.transferToChest(type, amount: controller.transferAmount(for: amount, choice: selectedChoice), chestKey: key)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                            }
+                            .padding(8).background(Color(.secondarySystemBackground)).cornerRadius(8)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Chest").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct CraftingBenchSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Blocks & Redstone") {
+                    ForEach(CraftCatalog.all) { recipe in
+                        let ok = controller.canCraft(recipe)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(recipe.title).font(.subheadline.bold())
+                                Text(recipe.ingredients.map { "\($0.1) \($0.0.rawValue)" }.joined(separator: " + "))
+                                    .font(.caption).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Button("Craft") { controller.craft(recipe) }
+                                .buttonStyle(.borderedProminent).disabled(!ok)
+                        }
+                    }
+                }
+                Section("Tools & Armour") {
+                    ForEach(EquipmentCraftCatalog.all) { recipe in
+                        let ok = controller.canCraftEquipment(recipe)
+                        let owned = controller.equipmentCount(for: recipe)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(recipe.title).font(.subheadline.bold())
+                                Text(recipe.ingredients.map { "\($0.1) \($0.0.rawValue)" }.joined(separator: " + "))
+                                    .font(.caption).foregroundColor(.secondary)
+                                if owned > 0 {
+                                    Text("In Pack: ×\(owned)").font(.caption2).foregroundColor(.green)
+                                }
+                            }
+                            Spacer()
+                            if owned > 0 {
+                                Button("Equip") { controller.equipCraftedEquipment(recipe) }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                            }
+                            Button("Craft") { controller.craftEquipment(recipe) }
+                                .buttonStyle(.borderedProminent).controlSize(.small).disabled(!ok)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Crafting Bench").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct VillagerTradeSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                if let id = controller.activeVillagerID, let villager = controller.villager(for: id) {
+                    let offer = controller.villagerTradeDescription(for: villager.profession)
+                    Label("\(villager.profession.rawValue) Villager", systemImage: villager.profession.symbol)
+                        .font(.title3.bold())
+                    Text("Give \(offer.cost) → Receive \(offer.reward)")
+                        .font(.subheadline).foregroundColor(.secondary)
+                    Button("Complete Trade") {
+                        controller.completeVillagerTrade()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Text("No active Villager trade.").foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .navigationTitle("Villager Trade").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct EnchantingSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Experience") {
+                    Text("Level \(controller.experienceLevel) · \(controller.experiencePoints) XP")
+                        .font(.subheadline.bold())
+                    if controller.gameMode != .survival {
+                        Text("Switch to Survival mode to spend XP on enchantments.")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                Section("Enchantments") {
+                    ForEach(EnchantmentKind.allCases) { kind in
+                        let level = controller.enchantmentLevel(kind)
+                        let cost = controller.enchantmentCost(kind)
+                        let maxed = level >= kind.maximumLevel
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(kind.rawValue)\(level > 0 ? " \(level)" : "")")
+                                    .font(.subheadline.bold())
+                                Text(kind.description).font(.caption).foregroundColor(.secondary)
+                                Text(maxed ? "Max level reached" : "Cost: Level \(cost)")
+                                    .font(.caption2).foregroundColor(.accentColor)
+                            }
+                            Spacer()
+                            Button(maxed ? "Max" : "Enchant") {
+                                controller.applyEnchantment(kind)
+                            }
+                            .buttonStyle(.borderedProminent).controlSize(.small)
+                            .disabled(!controller.canEnchant(kind))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Enchanting").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct BrewingStandSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Brew Potions") {
+                    ForEach(PotionKind.allCases) { potion in
+                        let owned = controller.potionCount(for: potion)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(potion.rawValue).font(.subheadline.bold())
+                                Text(potion.ingredients.map { "\($0.1) \($0.0.rawValue)" }.joined(separator: " + "))
+                                    .font(.caption).foregroundColor(.secondary)
+                                if owned > 0 {
+                                    Text("Brewed: ×\(owned)").font(.caption2).foregroundColor(.purple)
+                                }
+                            }
+                            Spacer()
+                            if owned > 0 {
+                                Button("Drink") { controller.drinkPotion(potion) }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                            }
+                            Button("Brew") { controller.brewPotion(potion) }
+                                .buttonStyle(.borderedProminent).controlSize(.small)
+                                .disabled(!controller.canBrew(potion))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Brewing Stand").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct AchievementsSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Unlocked \(controller.unlockedAchievements.count) of \(AchievementInfo.all.count)") {
+                    ForEach(AchievementInfo.all) { item in
+                        let unlocked = controller.unlockedAchievements.contains(item.id)
+                        HStack(spacing: 12) {
+                            Image(systemName: item.symbol)
+                                .foregroundColor(unlocked ? .yellow : .secondary)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title).font(.subheadline.bold())
+                                Text(item.detail).font(.caption).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(unlocked ? "Unlocked" : "Locked")
+                                .font(.caption2.bold())
+                                .foregroundColor(unlocked ? .green : .secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Achievements").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct InventoryBagSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+    @State private var showAchievements = false
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Progression") {
+                    Text("Level \(controller.experienceLevel) · \(controller.experiencePoints) XP")
+                        .font(.subheadline.bold())
+                    Text("Defeated Hostile Mobs: \(controller.defeatedHostileCount)")
+                        .font(.caption).foregroundColor(.secondary)
+                    Button("Achievements (\(controller.unlockedAchievements.count)/\(AchievementInfo.all.count))") {
+                        showAchievements = true
+                    }
+                }
+                Section("Potions") {
+                    ForEach(PotionKind.allCases) { potion in
+                        let owned = controller.potionCount(for: potion)
+                        let active = controller.activePotionEffects[potion]
+                        if owned > 0 || (active ?? 0) > 0 {
+                            HStack {
+                                Label(potion.rawValue, systemImage: potion.symbol).font(.subheadline.bold())
+                                Spacer()
+                                if let rem = active {
+                                    Text("\(Int(rem))s").font(.caption.monospacedDigit()).foregroundColor(.purple)
+                                }
+                                if owned > 0 {
+                                    Button("Drink (×\(owned))") { controller.drinkPotion(potion) }
+                                        .buttonStyle(.borderedProminent).controlSize(.small)
+                                }
+                            }
+                        }
+                    }
+                }
+                Section("Food & Cooking") {
+                    Button("Bake Bread (3 Wheat → 1 Bread)") { controller.bakeBread() }
+                        .disabled(controller.foodCount(for: .wheat) < 3)
+                    ForEach(FoodKind.allCases) { food in
+                        let c = controller.foodCount(for: food)
+                        if c > 0 {
+                            HStack {
+                                Text(food.rawValue).font(.subheadline.bold())
+                                Spacer()
+                                Text("×\(c)").font(.subheadline.monospacedDigit())
+                                if let cooked = food.cookingResult {
+                                    Button("Cook → \(cooked.rawValue)") { controller.cookFood(food) }
+                                        .buttonStyle(.bordered).controlSize(.small)
+                                        .disabled(controller.count(for: .coalOre) <= 0)
+                                } else if food.isEdible {
+                                    Button("Eat") { controller.eatFood(food) }
+                                        .buttonStyle(.borderedProminent).controlSize(.small)
+                                }
+                            }
+                        }
+                    }
+                }
+                Section("Blocks") {
+                    ForEach(BlockType.allCases) { type in
+                        let c = controller.count(for: type)
+                        HStack {
+                            Image(uiImage: type.previewImage).resizable().interpolation(.none).frame(width: 28, height: 28).cornerRadius(4)
+                            Text(type.rawValue).font(.subheadline.bold())
+                            Spacer()
+                            Text("×\(c)").font(.subheadline.monospacedDigit())
+                            Button("Hotbar") {
+                                controller.hotbarSlots[controller.hotbarSelection] = type
+                                controller.selectHotbarSlot(controller.hotbarSelection)
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Inventory").navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showAchievements) { AchievementsSheet(controller: controller) }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct BlockPaletteSheet: View {
+    @ObservedObject var controller: VoxelWorldController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 12) {
+                Picker("Category", selection: $controller.selectedCategory) {
+                    ForEach(BlockCategory.allCases) { cat in Text(cat.rawValue).tag(cat) }
+                }
+                .pickerStyle(.segmented).padding(.horizontal)
+
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 10)], spacing: 10) {
+                        ForEach(controller.visibleBlocks) { type in
+                            Button {
+                                controller.selectedBlock = type
+                                controller.hotbarSlots[controller.hotbarSelection] = type
+                                controller.saveWorld()
+                                controller.activeTool = .place
+                                dismiss()
+                            } label: {
+                                VStack(spacing: 5) {
+                                    Image(uiImage: type.previewImage).resizable().interpolation(.none).frame(width: 44, height: 44).cornerRadius(6)
+                                    Text(type.rawValue).font(.caption2.bold()).lineLimit(1)
+                                    Text("\(controller.gameMode == .creative ? 64 : controller.count(for: type))")
+                                        .font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity).padding(8)
+                                .background(controller.selectedBlock == type ? Color.accentColor.opacity(0.25) : Color(.secondarySystemBackground))
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Block Palette").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+// MARK: - Main Voxel Gameplay View
+
+struct ContentView: View {
+    @StateObject private var controller = VoxelWorldController()
+    @State private var showPaletteSheet = false
+    @State private var sceneViewRef: SCNView?
+
+    private let barColor = Color(red: 0.08, green: 0.10, blue: 0.14).opacity(0.68)
+
+    var body: some View {
+        ZStack {
+            VoxelSceneView(controller: controller)
+                .onAppear { sceneViewRef = nil }
                 .ignoresSafeArea()
 
             Image(systemName: "plus")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.75), radius: 2)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white.opacity(0.88))
+                .shadow(color: .black, radius: 1)
                 .allowsHitTesting(false)
 
-            VStack(spacing: 7) {
-                HStack(spacing: 6) {
-                    Picker("Tool", selection: $world.activeTool) {
-                        ForEach(InteractionTool.allCases, id: \.self) { tool in
-                            Text(tool.rawValue).tag(tool)
-                        }
+            VStack(spacing: 8) {
+                topBar
+                if let fraction = controller.bossHealthFraction {
+                    VStack(spacing: 3) {
+                        Text(controller.bossHealthLabel)
+                            .font(.caption2.bold().monospacedDigit())
+                            .foregroundColor(.white)
+                        ProgressView(value: fraction)
+                            .tint(.red)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 112)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-
-                    Button { world.showBrewingSheet = true } label: {
-                        Image(systemName: "flask.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(.purple)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.showInventorySheet = true } label: {
-                        Image(systemName: "backpack.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.showCraftSheet = true } label: {
-                        Image(systemName: "hammer.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(.yellow)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.isShieldRaised.toggle(); world.statusMessage = world.isShieldRaised ? "Shield raised · incoming damage reduced" : "Shield lowered" } label: {
-                        Image(systemName: world.isShieldRaised ? "shield.fill" : "shield")
-                            .font(.caption.bold())
-                            .foregroundStyle(world.isShieldRaised ? .cyan : .white)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button {
-                        world.isSprinting.toggle()
-                        world.statusMessage = world.isSprinting ? "Sprint enabled" : "Sprint disabled"
-                    } label: {
-                        Image(systemName: "figure.run")
-                            .font(.caption.bold())
-                            .foregroundStyle(world.isSprinting ? .green : .white)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.eatFood() } label: {
-                        Image(systemName: "fork.knife")
-                            .font(.caption.bold())
-                            .foregroundStyle(.orange)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.cycleWeather() } label: {
-                        Image(systemName: world.weather == .rain ? "cloud.rain.fill" : (world.weather == .snowstorm ? "cloud.snow.fill" : "cloud.sun.fill"))
-                            .font(.caption.bold())
-                            .foregroundStyle(.cyan)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.toggleDayNight() } label: {
-                        Image(systemName: world.isNightMode ? "moon.stars.fill" : "sun.max.fill")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(world.isNightMode ? .yellow : .orange)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Button { world.toggleCameraMode() } label: {
-                        Image(systemName: "camera.rotate.fill")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-
-                    Menu {
-                        ForEach(GameDimension.allCases) { dim in
-                            Button { world.selectDimension(dim) } label: {
-                                if world.activeDimension == dim {
-                                    Label(dim.rawValue, systemImage: "checkmark")
-                                } else {
-                                    Text(dim.rawValue)
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "sparkles")
-                            Text(world.activeDimension.rawValue)
-                        }
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                    }
-
-                    Menu {
-                        ForEach([1, 2, 3], id: \.self) { slot in
-                            Button { world.selectWorldSlot(slot) } label: {
-                                if world.activeSlot == slot {
-                                    Label("World \(slot)", systemImage: "checkmark")
-                                } else {
-                                    Text("World \(slot)")
-                                }
-                            }
-                        }
-                        Divider()
-                        Menu("Game Mode: \(world.gameMode.rawValue)") {
-                            ForEach(GameMode.allCases, id: \.self) { mode in
-                                Button {
-                                    world.setGameMode(mode)
-                                } label: {
-                                    if world.gameMode == mode { Label(mode.rawValue, systemImage: "checkmark") }
-                                    else { Text(mode.rawValue) }
-                                }
-                            }
-                        }
-                        Button("Inventory & Equipment…") { world.showInventorySheet = true }
-                        Button(world.multiplayerEnabled ? "LAN Multipeer: ON (\(world.connectedPeerCount))" : "LAN Multipeer: OFF") {
-                            world.toggleMultiplayerLobby()
-                        }
-                        Button(world.isAutoCycleEnabled ? "Auto Day/Night: ON" : "Auto Day/Night: OFF") { world.toggleAutoCycle() }
-                        Button("Respawn at Spawn") { world.respawnPlayer() }
-                        Button("Reset Current Dimension", role: .destructive) { world.regenerateNewWorld() }
-                    } label: {
-                        HStack(spacing: 2) {
-                            Image(systemName: "globe.americas.fill")
-                            Text("W\(world.activeSlot)")
-                        }
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.black.opacity(0.62))
+                    .cornerRadius(8)
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-
-                VStack(spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(world.activeDimension.rawValue.uppercased())
-                            .font(.caption2.bold())
-                            .foregroundStyle(world.activeDimension.badgeColor)
-                        Text("•").foregroundStyle(.white.opacity(0.6))
-                        Text(world.currentBiome.rawValue)
-                            .font(.caption2.bold())
-                            .foregroundStyle(.white)
-                        Text("•").foregroundStyle(.white.opacity(0.6))
-                        Text(world.coordsText)
-                            .font(.caption2.monospaced().bold())
-                            .foregroundStyle(.yellow)
-                    }
-
-                    if let bossHealth = world.bossHealthFraction {
-                        VStack(spacing: 3) {
-                            Text(world.bossHealthLabel).font(.caption2.bold()).foregroundStyle(.purple)
-                            ProgressView(value: bossHealth).tint(.purple).frame(maxWidth: 210)
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.black.opacity(0.48), in: Capsule())
-                    }
-
-                    if !world.activePotionEffects.isEmpty {
-                        HStack(spacing: 6) {
-                            ForEach(PotionKind.allCases.filter { (world.activePotionEffects[$0] ?? 0) > 0 }) { effect in
-                                Label("\(effect.rawValue) \(Int(world.activePotionEffects[effect] ?? 0))s", systemImage: effect.symbol)
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.purple)
-                            }
-                        }
-                    }
-
-                    if world.isUnderwater && world.gameMode == .survival {
-                        HStack(spacing: 4) {
-                            Image(systemName: "water.waves").foregroundStyle(.cyan)
-                            ForEach(0..<10, id: \.self) { index in
-                                Image(systemName: index < world.oxygen ? "bubble.left.fill" : "bubble.left")
-                                    .font(.caption2)
-                                    .foregroundStyle(index < world.oxygen ? .cyan : .white.opacity(0.35))
-                            }
-                        }
-                    }
-                    if world.gameMode == .survival {
-                        HStack(spacing: 5) {
-                            Image(systemName: "figure.run").foregroundStyle(.green)
-                            ProgressView(value: world.stamina / 100.0)
-                                .tint(.green)
-                                .frame(width: 74)
-                            Text("\(Int(world.stamina))%")
-                                .font(.caption2.monospacedDigit().bold())
-                                .foregroundStyle(.green)
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        Label("HP \(world.health)/20", systemImage: "heart.fill")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.red)
-                        Label("Food \(world.hunger)/20", systemImage: "fork.knife")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.orange)
-                        Label("Lv \(world.experienceLevel)", systemImage: "sparkles")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.green)
-                        ProgressView(value: world.experienceProgress)
-                            .tint(.green)
-                            .frame(width: 42)
-                        Text(world.gameMode.rawValue.uppercased())
-                            .font(.caption2.bold())
-                            .foregroundStyle(world.gameMode == .creative ? .cyan : .green)
-                        if world.miningFatigueRemaining > 0 {
-                            Label("MINING FATIGUE", systemImage: "hourglass")
-                                .font(.caption2.bold()).foregroundStyle(.purple)
-                        }
-                        if world.treasureCompassTarget != nil {
-                            Text(world.treasureCompassText)
-                                .font(.caption2.bold()).foregroundStyle(.cyan)
-                                .lineLimit(1)
-                        }
-                        Text(world.statusMessage)
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .lineLimit(1)
-                        if world.miningProgress > 0 {
-                            ProgressView(value: world.miningProgress)
-                                .tint(.yellow)
-                                .frame(width: 46)
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 12))
-
                 Spacer()
+                bottomControls
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 8)
+        }
+        .sheet(isPresented: $showPaletteSheet) { BlockPaletteSheet(controller: controller) }
+        .sheet(isPresented: $controller.showCraftSheet) { CraftingBenchSheet(controller: controller) }
+        .sheet(isPresented: $controller.showInventorySheet) { InventoryBagSheet(controller: controller) }
+        .sheet(isPresented: $controller.showChestSheet) { ChestStorageSheet(controller: controller) }
+        .sheet(isPresented: $controller.showVillagerTradeSheet) { VillagerTradeSheet(controller: controller) }
+        .sheet(isPresented: $controller.showEnchantingSheet) { EnchantingSheet(controller: controller) }
+        .sheet(isPresented: $controller.showBrewingSheet) { BrewingStandSheet(controller: controller) }
+    }
 
-                HStack(alignment: .bottom) {
-                    VStack(spacing: 6) {
-                        MoveHoldButton(systemImage: "chevron.up", onPress: { world.setMoveInput(forward: 1, strafe: 0) }, onRelease: { world.setMoveInput(forward: 0, strafe: 0) })
-                        HStack(spacing: 6) {
-                            MoveHoldButton(systemImage: "chevron.left", onPress: { world.setMoveInput(forward: 0, strafe: -1) }, onRelease: { world.setMoveInput(forward: 0, strafe: 0) })
-                            MoveHoldButton(systemImage: "chevron.down", onPress: { world.setMoveInput(forward: -1, strafe: 0) }, onRelease: { world.setMoveInput(forward: 0, strafe: 0) })
-                            MoveHoldButton(systemImage: "chevron.right", onPress: { world.setMoveInput(forward: 0, strafe: 1) }, onRelease: { world.setMoveInput(forward: 0, strafe: 0) })
+    private var topBar: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Minerva").font(.subheadline.bold()).foregroundColor(.white)
+                Menu {
+                    ForEach(1...3, id: \.self) { slot in
+                        Button("World Slot \(slot)") { controller.selectWorldSlot(slot) }
+                    }
+                } label: {
+                    Text("S\(controller.activeSlot)").font(.caption2.bold().monospacedDigit())
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(Color.white.opacity(0.18)).cornerRadius(5).foregroundColor(.white)
+                }
+                Menu {
+                    ForEach(GameDimension.allCases) { dim in
+                        Button(dim.rawValue) { controller.selectDimension(dim) }
+                    }
+                } label: {
+                    Text(controller.activeDimension.rawValue).font(.caption2.bold())
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(controller.activeDimension.badgeColor.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
+                }
+                Button { controller.setGameMode(controller.gameMode == .creative ? .survival : .creative) } label: {
+                    Text(controller.gameMode == .creative ? "Creative" : "Survival")
+                        .font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(controller.gameMode == .creative ? Color.cyan.opacity(0.35) : Color.orange.opacity(0.35))
+                        .cornerRadius(5).foregroundColor(.white)
+                }
+                Spacer()
+                Text(controller.coordsText).font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.9))
+                Button { controller.toggleDayNight() } label: {
+                    Image(systemName: controller.isNightMode ? "moon.fill" : "sun.max.fill")
+                        .font(.caption.bold()).foregroundColor(controller.isNightMode ? .indigo : .yellow).padding(5)
+                }
+                Button { controller.cycleWeather() } label: {
+                    Image(systemName: controller.weather == .rain ? "cloud.rain.fill" : (controller.weather == .snowstorm ? "snowflake" : "sun.min"))
+                        .font(.caption.bold()).foregroundColor(.white).padding(5)
+                }
+                Button { controller.toggleMultiplayerLobby() } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                        if controller.multiplayerEnabled { Text("\(controller.connectedPeerCount)").font(.caption2.monospacedDigit()) }
+                    }
+                    .font(.caption.bold()).foregroundColor(controller.multiplayerEnabled ? .green : .white).padding(5)
+                }
+                Button { controller.toggleCameraMode() } label: {
+                    Image(systemName: controller.cameraMode == .firstPerson ? "eye" : "person.crop.square")
+                        .font(.caption.bold()).foregroundColor(.white).padding(5)
+                }
+                Button { controller.saveWorld() } label: {
+                    Image(systemName: "square.and.arrow.down").font(.caption.bold()).foregroundColor(.white).padding(5)
+                }
+                Button { controller.regenerateNewWorld() } label: {
+                    Image(systemName: "arrow.clockwise").font(.caption.bold()).foregroundColor(.white).padding(5)
+                }
+            }
+
+            if controller.gameMode == .survival {
+                HStack(spacing: 8) {
+                    HStack(spacing: 2) {
+                        ForEach(0..<10, id: \.self) { idx in
+                            Image(systemName: idx * 2 + 2 <= controller.health ? "heart.fill" : (idx * 2 + 1 == controller.health ? "heart.lefthalf.filled" : "heart"))
+                                .font(.system(size: 10)).foregroundColor(.red)
                         }
                     }
-
+                    HStack(spacing: 2) {
+                        ForEach(0..<10, id: \.self) { idx in
+                            Image(systemName: idx * 2 + 2 <= controller.hunger ? "fork.knife.circle.fill" : "circle")
+                                .font(.system(size: 10)).foregroundColor(.orange)
+                        }
+                    }
+                    if controller.isUnderwater || controller.oxygen < 10 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "drop.fill").font(.system(size: 10)).foregroundColor(.cyan)
+                            Text("\(controller.oxygen)/10").font(.caption2.bold().monospacedDigit()).foregroundColor(.cyan)
+                        }
+                    }
+                    HStack(spacing: 3) {
+                        Image(systemName: "bolt.fill").font(.system(size: 10)).foregroundColor(controller.stamina > 25 ? .yellow : .red)
+                        ProgressView(value: controller.stamina / 100.0).frame(width: 44).tint(controller.stamina > 25 ? .yellow : .red)
+                    }
                     Spacer()
-
-                    VStack(spacing: 8) {
-                        Button { world.respawnPlayer() } label: {
-                            Text("SPAWN")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
-                        }
-
-                        Button { world.scanForTreasure() } label: {
-                            Label("TREASURE MAP", systemImage: "map.fill")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(.blue.opacity(0.68), in: RoundedRectangle(cornerRadius: 9))
-                        }
-                        HStack(spacing: 6) {
-                            Button { world.craftBoat() } label: {
-                                Label("CRAFT", systemImage: "hammer.fill")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 8)
-                                    .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 9))
-                            }
-                            Button { world.toggleBoat() } label: {
-                                Label(world.isInBoat ? "EXIT" : (world.boatCount > 0 ? "BOAT \(world.boatCount)" : "BOARD"), systemImage: "sailboat.fill")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 8)
-                                    .background(world.isInBoat ? Color.blue.opacity(0.75) : Color.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 9))
-                            }
-                        }
-
-                        Button { world.jump() } label: {
-                            Text("JUMP")
-                                .font(.caption.bold())
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                        }
+                    Button { controller.eatFood() } label: {
+                        Text("Eat").font(.caption2.bold()).padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.green.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
+                    }
+                    Button { controller.showCraftSheet = true } label: {
+                        Text("Craft").font(.caption2.bold()).padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
+                    }
+                    Button { controller.showInventorySheet = true } label: {
+                        Text("Bag").font(.caption2.bold()).padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
                     }
                 }
-                .padding(.horizontal)
-
-                // Nine-slot quick-access hotbar
-                HStack(spacing: 5) {
-                    ForEach(0..<9, id: \.self) { index in
-                        let block = world.hotbarSlots[index]
-                        let selected = world.hotbarSelection == index
-                        Button {
-                            world.selectHotbarSlot(index)
-                        } label: {
-                            VStack(spacing: 2) {
-                                Image(uiImage: block.previewImage)
-                                    .interpolation(.none)
-                                    .resizable()
-                                    .frame(width: 27, height: 27)
-                                Text("\(world.count(for: block))")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(.white)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 5)
-                            .background(selected ? Color.white.opacity(0.30) : Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.white.opacity(0.25), lineWidth: selected ? 2 : 1))
+                HStack(spacing: 6) {
+                    Menu {
+                        ForEach(ToolKind.allCases) { tool in
+                            Button(tool.rawValue) { controller.equipTool(tool) }
                         }
+                    } label: {
+                        Text("\(controller.toolTier.rawValue) \(controller.selectedTool.rawValue) (\(controller.toolDurability))")
+                            .font(.caption2.bold().monospacedDigit()).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.white.opacity(0.16)).cornerRadius(5).foregroundColor(.white)
                     }
-                }
-                .padding(.horizontal, 8)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(BlockCategory.allCases) { cat in
-                            let active = world.selectedCategory == cat
-                            Button { world.selectedCategory = cat } label: {
-                                Text(cat.rawValue)
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(active ? .black : .white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(active ? Color.yellow : Color.black.opacity(0.5), in: Capsule())
-                            }
-                        }
+                    Button { controller.cycleToolTier() } label: {
+                        Text("Tier").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.teal.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
                     }
-                    .padding(.horizontal)
+                    Menu {
+                        Button("Cycle Full Set (\(controller.armorTier.rawValue))") { controller.cycleArmorTier() }
+                        Button("Helmet (\(controller.helmetTier.rawValue))") { controller.cycleArmorPiece("Helmet") }
+                        Button("Chestplate (\(controller.chestplateTier.rawValue))") { controller.cycleArmorPiece("Chestplate") }
+                        Button("Leggings (\(controller.leggingsTier.rawValue))") { controller.cycleArmorPiece("Leggings") }
+                        Button("Boots (\(controller.bootsTier.rawValue))") { controller.cycleArmorPiece("Boots") }
+                    } label: {
+                        Text("DEF -\(controller.effectiveArmorReduction) (\(controller.armorDurability))")
+                            .font(.caption2.bold().monospacedDigit()).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.indigo.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
+                    }
+                    Button { controller.showEnchantingSheet = true } label: {
+                        Text("Lv.\(controller.experienceLevel)").font(.caption2.bold().monospacedDigit())
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.green.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
+                    }
+                    Button { controller.showBrewingSheet = true } label: {
+                        Text("Brew").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.purple.opacity(0.35)).cornerRadius(5).foregroundColor(.white)
+                    }
+                    Spacer()
                 }
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6).background(barColor).cornerRadius(10)
+    }
 
-                ScrollView(.horizontal, showsIndicators: false) {
+    private var bottomControls: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom) {
+                VirtualDPadView { x, z in controller.setMovementInput(x: x, z: z) }
+                Spacer()
+                VStack(spacing: 8) {
                     HStack(spacing: 8) {
-                        ForEach(world.visibleBlocks) { block in
-                            let selected = world.selectedBlock == block
-                            let qty = world.count(for: block)
-                            Button {
-                                world.selectedBlock = block
-                                world.hotbarSlots[world.hotbarSelection] = block
-                                world.activeTool = .place
-                            } label: {
-                                VStack(spacing: 3) {
-                                    ZStack(alignment: .bottomTrailing) {
-                                        Image(uiImage: block.previewImage)
-                                            .interpolation(.none)
-                                            .resizable()
-                                            .frame(width: 28, height: 28)
-                                            .clipShape(RoundedRectangle(cornerRadius: 5))
-                                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.black.opacity(0.35), lineWidth: 1))
-                                        Text("\(qty)")
-                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 3)
-                                            .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 3))
-                                    }
-                                    Text(block.rawValue)
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                }
-                                .padding(6)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Color.white.opacity(0.32) : Color.black.opacity(0.45)))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.yellow : Color.white.opacity(0.2), lineWidth: selected ? 2 : 1))
+                        Button { controller.setSprint(!controller.isSprinting) } label: {
+                            Text(controller.isSprinting ? "Sprint ON" : "Sprint")
+                                .font(.caption.bold()).foregroundColor(controller.isSprinting ? .yellow : .white)
+                                .padding(.horizontal, 10).padding(.vertical, 8).background(barColor).cornerRadius(8)
+                        }
+                        if controller.gameMode == .survival {
+                            Button { controller.toggleShield() } label: {
+                                Text(controller.isShieldRaised ? "Shield ON" : "Shield")
+                                    .font(.caption.bold()).foregroundColor(controller.isShieldRaised ? .cyan : .white)
+                                    .padding(.horizontal, 10).padding(.vertical, 8).background(barColor).cornerRadius(8)
                             }
                         }
+                        Menu {
+                            Button("Craft Boat (5 Oak Planks)") { controller.craftBoat() }
+                            Button(controller.isInBoat ? "Leave Boat" : "Use Boat") { controller.toggleBoat() }
+                            Button("Scan Treasure") { controller.scanForTreasure() }
+                        } label: {
+                            Text("Boat (\(controller.boatCount))").font(.caption.bold()).foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 8).background(barColor).cornerRadius(8)
+                        }
                     }
-                    .padding(.horizontal)
+                    HStack(spacing: 8) {
+                        Button {
+                            controller.activeTool = .place
+                            _ = controller.performPrimaryAction(at: nil, in: sceneViewRef)
+                        } label: {
+                            Text("Place").font(.caption.bold()).foregroundColor(controller.activeTool == .place ? .cyan : .white)
+                                .padding(.horizontal, 12).padding(.vertical, 9).background(barColor).cornerRadius(8)
+                        }
+                        Button {
+                            controller.activeTool = .breakBlock
+                            _ = controller.performPrimaryAction(at: nil, in: sceneViewRef)
+                        } label: {
+                            Text("Mine").font(.caption.bold()).foregroundColor(controller.activeTool == .breakBlock ? .orange : .white)
+                                .padding(.horizontal, 12).padding(.vertical, 9).background(barColor).cornerRadius(8)
+                        }
+                        Button { controller.jump() } label: {
+                            Text("Jump").font(.caption.bold()).foregroundColor(.white)
+                                .padding(.horizontal, 12).padding(.vertical, 9).background(barColor).cornerRadius(8)
+                        }
+                    }
                 }
-                .padding(.bottom, 10)
             }
-        }
-        .sheet(isPresented: $world.showCraftSheet) {
-            CraftingSheetView(world: world)
-        }
-        .sheet(isPresented: $world.showInventorySheet) {
-            InventorySheetView(world: world)
-        }
-        .sheet(isPresented: $world.showEnchantingSheet) {
-            EnchantingSheetView(world: world)
-        }
-        .sheet(isPresented: $world.showChestSheet) {
-            if let chestKey = world.activeChestKey {
-                ChestStorageSheetView(world: world, chestKey: chestKey)
+
+            HStack(spacing: 5) {
+                ForEach(0..<9, id: \.self) { idx in
+                    let block = controller.hotbarSlots[idx]
+                    let selected = controller.hotbarSelection == idx
+                    Button { controller.selectHotbarSlot(idx) } label: {
+                        VStack(spacing: 1) {
+                            Image(uiImage: block.previewImage).resizable().interpolation(.none).frame(width: 24, height: 24).cornerRadius(3)
+                            Text("\(controller.gameMode == .creative ? 64 : controller.count(for: block))")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundColor(.white)
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 4)
+                        .background(selected ? Color.white.opacity(0.32) : Color.white.opacity(0.08))
+                        .cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color.yellow : Color.clear, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button { showPaletteSheet = true } label: {
+                    Image(systemName: "square.grid.2x2.fill").font(.caption.bold()).foregroundColor(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 10).background(Color.white.opacity(0.16)).cornerRadius(6)
+                }
             }
-        }
-        .sheet(isPresented: $world.showVillagerTradeSheet) {
-            VillagerTradeSheetView(world: world)
-        }
-        .sheet(isPresented: $world.showBrewingSheet) {
-            BrewingSheetView(world: world)
-        }
-    }
-}
-
-struct MoveHoldButton: View {
-    let systemImage: String
-    let onPress: () -> Void
-    let onRelease: () -> Void
-
-    @State private var isPressed = false
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.headline.bold())
-            .foregroundStyle(.white)
-            .frame(width: 44, height: 44)
-            .background(isPressed ? Color.white.opacity(0.35) : Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.25), lineWidth: 1))
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isPressed { isPressed = true; onPress() }
-                    }
-                    .onEnded { _ in
-                        isPressed = false; onRelease()
-                    }
-            )
-    }
-}
-
-@main
-struct VoxelCraftApp: App {
-    var body: some Scene {
-        WindowGroup {
-            VoxelGameView()
+            .padding(.horizontal, 6).padding(.vertical, 5).background(barColor).cornerRadius(10)
         }
     }
 }
