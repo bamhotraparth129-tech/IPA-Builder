@@ -499,10 +499,14 @@ struct VoxelGameView: View {
 
                     if !world.activePotionEffects.isEmpty {
                         HStack(spacing: 6) {
-                            ForEach(PotionKind.allCases.filter { (world.activePotionEffects[$0] ?? 0) > 0 }) { effect in
-                                Label("\(effect.rawValue) \(Int(world.activePotionEffects[effect] ?? 0))s", systemImage: effect.symbol)
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.purple)
+                            ForEach(PotionKind.allCases) { effect in
+                                if let remaining = world.activePotionEffects[effect], remaining > 0 {
+                                    PotionEffectBadge(
+                                        title: effect.rawValue,
+                                        seconds: Int(remaining),
+                                        symbol: effect.symbol
+                                    )
+                                }
                             }
                         }
                     }
@@ -863,6 +867,21 @@ struct MoveHoldButton: View {
                         isPressed = false; onRelease()
                     }
             )
+    }
+}
+
+
+private struct PotionEffectBadge: View {
+    let title: String
+    let seconds: Int
+    let symbol: String
+
+    var body: some View {
+        let durationText = String(seconds) + "s"
+        let labelText = title + " " + durationText
+        return Label(labelText, systemImage: symbol)
+            .font(.caption2.bold())
+            .foregroundStyle(.purple)
     }
 }
 
