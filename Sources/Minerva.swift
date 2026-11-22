@@ -7585,25 +7585,12 @@ struct VoxelGameView: View {
                 // Nine-slot quick-access hotbar
                 HStack(spacing: 5) {
                     ForEach(0..<9, id: \.self) { index in
-                        let block = world.hotbarSlots[index]
-                        let selected = world.hotbarSelection == index
-                        Button {
-                            world.selectHotbarSlot(index)
-                        } label: {
-                            VStack(spacing: 2) {
-                                Image(uiImage: block.previewImage)
-                                    .interpolation(.none)
-                                    .resizable()
-                                    .frame(width: 27, height: 27)
-                                Text("\(world.count(for: block))")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(.white)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 5)
-                            .background(selected ? Color.white.opacity(0.30) : Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.yellow : Color.white.opacity(0.25), lineWidth: selected ? 2 : 1))
-                        }
+                        HotbarSlotButton(
+                            block: world.hotbarSlots[index],
+                            quantity: world.count(for: world.hotbarSlots[index]),
+                            isSelected: world.hotbarSelection == index,
+                            onSelect: { world.selectHotbarSlot(index) }
+                        )
                     }
                 }
                 .padding(.horizontal, 8)
@@ -7701,6 +7688,39 @@ struct VoxelGameView: View {
 
 /// Kept separate from VoxelGameView so Swift's type checker does not have to
 /// infer the entire block-palette button as part of the already-large HUD view.
+
+private struct HotbarSlotButton: View {
+    let block: BlockType
+    let quantity: Int
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 2) {
+                Image(uiImage: block.previewImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .frame(width: 27, height: 27)
+                Text(String(quantity))
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 5)
+            .background(
+                isSelected ? Color.white.opacity(0.30) : Color.black.opacity(0.55),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.yellow : Color.white.opacity(0.25), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct BlockPaletteButton: View {
     let block: BlockType
     let quantity: Int
