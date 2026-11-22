@@ -22,8 +22,8 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Authenticate with Face ID or Passcode to reveal hidden ₹ balances."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationLandscapeLeft
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
