@@ -1094,7 +1094,7 @@ enum BlockType: String, Codable, CaseIterable, Identifiable {
         case .bed: return UIColor(red: 0.78, green: 0.16, blue: 0.16, alpha: 1.0)
         case .birchLog, .birchPlanks: return UIColor(red: 0.88, green: 0.82, blue: 0.64, alpha: 1.0)
         case .stone, .cobblestone, .mossyCobble, .stoneBricks, .piston, .furnace, .bedrock, .coalOre, .ironOre, .goldOre, .diamondOre, .emeraldOre: return UIColor(red: 0.48, green: 0.50, blue: 0.53, alpha: 1.0)
-        case .redstoneOre, .redstoneDust, .lever, .pressurePlate, .repeater, .button, .redstoneLamp: return UIColor(red: 0.92, green: 0.16, blue: 0.14, alpha: 1.0)
+        case .redstoneOre, .redstoneDust, .lever, .pressurePlate, .repeater, .button: return UIColor(red: 0.92, green: 0.16, blue: 0.14, alpha: 1.0)
         case .tnt: return UIColor(red: 0.88, green: 0.22, blue: 0.18, alpha: 1.0)
         case .bricks: return UIColor(red: 0.68, green: 0.28, blue: 0.22, alpha: 1.0)
         case .quartzOre, .endStone: return UIColor(red: 0.86, green: 0.84, blue: 0.66, alpha: 1.0)
@@ -1320,6 +1320,10 @@ enum BlockType: String, Codable, CaseIterable, Identifiable {
             let mat = makePixelMaterial(kind: .portal, translucent: true); mat.emission.contents = UIColor(red: 0.62, green: 0.22, blue: 0.98, alpha: 0.7); box.materials = [mat, mat, mat, mat, mat, mat]
         case .seaLantern:
             let mat = makePixelMaterial(kind: .seaLantern); mat.emission.contents = UIColor(red: 0.65, green: 0.96, blue: 1.0, alpha: 0.65); box.materials = [mat, mat, mat, mat, mat, mat]
+        case .prismarine:
+            let mat = makePixelMaterial(kind: .seaLantern)
+            mat.diffuse.contents = UIColor(red: 0.24, green: 0.66, blue: 0.61, alpha: 1.0)
+            box.materials = [mat, mat, mat, mat, mat, mat]
         case .amethyst:
             let mat = makePixelMaterial(kind: .amethyst); mat.emission.contents = UIColor(red: 0.64, green: 0.35, blue: 0.92, alpha: 0.35); box.materials = [mat, mat, mat, mat, mat, mat]
         case .netherrack:
@@ -1951,7 +1955,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         treasureCompassText = "Treasure · \(Int(nearest.1))m · bearing \(normalized)° · X:\(nearest.0.x) Z:\(nearest.0.z)"
         statusMessage = treasureCompassText
         unlockAchievement("deep_sea_cartographer")
-        if let dolphin = mobs.first(where: { $0.kind == .dolphin && simd_distance($0.position, playerPos) < 18 }) {
+        if mobs.contains(where: { $0.kind == .dolphin && simd_distance($0.position, playerPos) < 18 }) {
             dolphinGuideAchievementTimer = 8
             unlockAchievement("dolphin_friend")
             statusMessage = "Dolphin nearby! Follow it toward the treasure"
@@ -4042,11 +4046,14 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
         let preferred: [BlockType]
         switch villager.profession {
-        case .farmer: preferred = [.crop, .compost] // crop plots act as farmer work areas
+        case .farmer: preferred = [.crop] // crop plots act as farmer work areas
         case .miner: preferred = [.furnace]
         case .builder: preferred = [.craftingTable]
         }
-        let candidates = blocks.keys.filter { preferred.contains(blocks[$0] ?? .air) }
+        let candidates = blocks.keys.filter { coord in
+            guard let block = blocks[coord] else { return false }
+            return preferred.contains(block)
+        }
         if let station = candidates.min(by: { a, b in
             let da = simd_distance(SIMD3<Float>(Float(a.x) + 0.5, Float(a.y) + 1, Float(a.z) + 0.5), villager.position)
             let db = simd_distance(SIMD3<Float>(Float(b.x) + 0.5, Float(b.y) + 1, Float(b.z) + 0.5), villager.position)
@@ -4072,7 +4079,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let goalCell = VillagerPathCell(x: Int(floor(target.x)), z: Int(floor(target.z)))
         if startCell == goalCell { return [] }
 
-        let startFloor = highestSolidY(atX: startCell.x, z: startCell.z)
         var queue: [VillagerPathCell] = [startCell]
         var queueIndex = 0
         var previous: [VillagerPathCell: VillagerPathCell] = [:]
@@ -4402,10 +4408,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             let headNode = SCNNode(geometry: head); headNode.position = SCNVector3(0, 0.46, -0.52)
             let eyeMat = SCNMaterial(); eyeMat.diffuse.contents = UIColor.red; eyeMat.emission.contents = UIColor.red
             for side: Float in [-1, 1] {
-                let eye = SCNBox(width: 0.08, height: 0.07, length: 0.04); eye.materials = [eyeMat]
+                let eye = SCNBox(width: 0.08, height: 0.07, length: 0.04, chamferRadius: 0.0); eye.materials = [eyeMat]
                 let eyeNode = SCNNode(geometry: eye); eyeNode.position = SCNVector3(side * 0.12, 0.50, -0.73); container.addChildNode(eyeNode)
                 for legIndex in 0..<4 {
-                    let leg = SCNBox(width: 0.08, height: 0.08, length: 0.72); leg.materials = [dark]
+                    let leg = SCNBox(width: 0.08, height: 0.08, length: 0.72, chamferRadius: 0.0); leg.materials = [dark]
                     let legNode = SCNNode(geometry: leg)
                     legNode.position = SCNVector3(side * (0.36 + Float(legIndex) * 0.015), 0.30, Float(legIndex - 1) * 0.25)
                     legNode.eulerAngles.y = side * (0.55 + Float(legIndex) * 0.12)
@@ -4906,10 +4912,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                 if ny < 2.0 {
                     ny = 15.0
                     nx = playerPos.x + Float.random(in: -12...12)
-                    wNode.position.z = CGFloat(playerPos.z + Float.random(in: -12...12))
+                    wNode.position.z = playerPos.z + Float.random(in: -12...12)
                 }
-                wNode.position.x = CGFloat(nx)
-                wNode.position.y = CGFloat(ny)
+                wNode.position.x = nx
+                wNode.position.y = ny
             }
         }
 
@@ -5037,9 +5043,9 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
     }
 
-    private func removeBlockInternal(coord: BlockCoord) {
+    private func removeBlockInternal(coord: BlockCoord, markModified: Bool = true) {
         blocks.removeValue(forKey: coord)
-        modifiedCoords.insert(coord)
+        if markModified { modifiedCoords.insert(coord) }
         openDoors.remove(coord)
         redstoneToggledDoors.remove(coord)
         openedChests.remove(coord)
@@ -5054,6 +5060,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         blockNodes.removeValue(forKey: coord)
         let cc = chunkCoord(forWorldX: coord.x, z: coord.z)
         if loadedChunks.contains(cc) { rebuildMergedChunkNode(cc) }
+    }
+
+    private func removeBlockInternal(at coord: BlockCoord, markModified: Bool = true) {
+        removeBlockInternal(coord: coord, markModified: markModified)
     }
 
     private func clearAllBlockNodes() {
@@ -5132,11 +5142,14 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             discoveredBiomes: Array(discoveredBiomes),
             pets: mobs.filter { $0.isTamed && [.wolf, .fox, .bear].contains($0.kind) }.map { mob in
                 SavedPetEntry(id: mob.id, kind: mob.kind.rawValue, x: mob.position.x, y: mob.position.y,
-                              z: mob.position.z, yaw: mob.yaw, hp: mob.hp, isSitting: mob.isSitting)
+                              z: mob.position.z, yaw: mob.yaw, hp: mob.hp, isSitting: mob.isSitting,
+                              isGuarding: mob.isGuarding,
+                              guardX: mob.guardPosition?.x, guardY: mob.guardPosition?.y,
+                              guardZ: mob.guardPosition?.z)
             }
         )
         if let data = try? JSONEncoder().encode(snapshot) {
-            try? data.write(to: saveURL, options: .atomic)
+            try? data.write(to: saveURL, options: Data.WritingOptions.atomic)
         }
     }
 
@@ -5281,7 +5294,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
 
         for node in cloudNodes {
-            var nextX = node.position.x + CGFloat(0.75 * dt)
+            var nextX = node.position.x + 0.75 * dt
             if nextX > 16 { nextX = -16 }
             node.position.x = nextX
         }
@@ -5291,6 +5304,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let wishXZ = forwardXZ * moveInput.y + rightXZ * moveInput.x
         let wishLen = simd_length(wishXZ)
         let dirXZ = wishLen > 0.001 ? wishXZ / wishLen : SIMD2<Float>(0, 0)
+        let canSprint = isSprinting && stamina > 1 && (gameMode == .creative || hunger > 0)
+        var headSubmerged = false
+        var landedFallDamage = 0
+        var hazardHit: String?
 
         if isInBoat, let boat = boatNode {
             let steer = moveInput.x
@@ -5315,17 +5332,17 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                 if blocks[cell] == .water { count += 1 }
             }
             if supportedSamples >= 3 {
-                boat.position.x = CGFloat(candidateX)
-                boat.position.z = CGFloat(candidateZ)
+                boat.position.x = candidateX
+                boat.position.z = candidateZ
                 boatTravelDistance += abs(boatSpeed * dt)
             } else {
                 boatSpeed *= 0.68
             }
             boat.eulerAngles.y = yaw
             let rowingFactor = min(1.0, abs(boatSpeed) / 5.0)
-            boat.eulerAngles.x = CGFloat(-min(0.045, rowingFactor * 0.045) * (boatSpeed >= 0 ? 1 : -1))
-            boat.eulerAngles.z = CGFloat(-moveInput.x * rowingFactor * 0.035)
-            boat.position.y += CGFloat(sin(Float(time) * 2.1) * 0.012)
+            boat.eulerAngles.x = -min(0.045, rowingFactor * 0.045) * (boatSpeed >= 0 ? 1 : -1)
+            boat.eulerAngles.z = -moveInput.x * rowingFactor * 0.035
+            boat.position.y += sin(Float(time) * 2.1) * 0.012
             boatAutosaveTimer += dt
             if boatAutosaveTimer >= 3.0 {
                 boatAutosaveTimer = 0
@@ -5346,7 +5363,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         } else {
         let potionSpeedBoost: Float = (activePotionEffects[.speed] ?? 0) > 0 ? 1.45 : 1.0
         let dolphinGrace: Float = mobs.contains(where: { $0.kind == .dolphin && simd_distance($0.position, playerPos) < 5.0 }) ? 1.28 : 1.0
-        let canSprint = isSprinting && stamina > 1 && (gameMode == .creative || hunger > 0)
         let sprintBoost: Float = canSprint ? 1.65 : 1.0
         let moveSpeed: Float = 5.2 * potionSpeedBoost * sprintBoost * dolphinGrace
         let nextX = playerPos.x + dirXZ.x * moveSpeed * dt
@@ -5374,7 +5390,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let feetCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 1.55)), z: Int(floor(playerPos.z)))
         let inWater = blocks[feetCoord] == .water
         let headCoord = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(playerPos.y - 0.2)), z: Int(floor(playerPos.z)))
-        let headSubmerged = blocks[headCoord] == .water
+        headSubmerged = blocks[headCoord] == .water
 
         if inWater {
             if headSubmerged {
@@ -5394,9 +5410,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
 
         let nextEyeY = playerPos.y + verticalVelocity * dt
         let nextFeetY = nextEyeY - 1.65
-        var landedFallDamage = 0
-        var hazardHit: String?
-
         if verticalVelocity < 0 {
             let checkFeet = BlockCoord(x: Int(floor(playerPos.x)), y: Int(floor(nextFeetY)), z: Int(floor(playerPos.z)))
             if let blockBelow = blocks[checkFeet], !blockBelow.isPassable {
@@ -6834,7 +6847,17 @@ struct VillagerTradeSheetView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
                 } else {
-                    ContentUnavailableView("Villager unavailable", systemImage: "person.crop.circle.badge.questionmark", description: Text("The villager may have moved or left the loaded area."))
+                    VStack(spacing: 10) {
+                        Image(systemName: "person.crop.circle.badge.questionmark")
+                            .font(.system(size: 34))
+                            .foregroundStyle(.secondary)
+                        Text("Villager unavailable").font(.headline)
+                        Text("The villager may have moved or left the loaded area.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 180)
                 }
                 Spacer(minLength: 0)
             }
