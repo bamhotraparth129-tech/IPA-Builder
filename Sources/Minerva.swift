@@ -7211,7 +7211,8 @@ struct VoxelGameView: View {
     @State private var isShowingHowToPlay = false
 
     var body: some View {
-        ZStack {
+        Group {
+            ZStack {
             if isShowingMainMenu {
                 MinervaMainMenuView(
                     world: world,
@@ -7665,6 +7666,7 @@ struct VoxelGameView: View {
             }
             }
         }
+        }
         .sheet(isPresented: $isShowingSettings) {
             MinervaSettingsView(world: world)
         }
@@ -7681,8 +7683,21 @@ struct VoxelGameView: View {
             EnchantingSheetView(world: world)
         }
         .sheet(isPresented: $world.showChestSheet) {
-            if let chestKey = world.activeChestKey {
-                ChestStorageSheetView(world: world, chestKey: chestKey)
+            Group {
+                if let chestKey = world.activeChestKey {
+                    ChestStorageSheetView(world: world, chestKey: chestKey)
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "shippingbox")
+                            .font(.largeTitle)
+                        Text("Chest unavailable")
+                            .font(.headline)
+                        Text("The selected chest is no longer available.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                }
             }
         }
         .sheet(isPresented: $world.showVillagerTradeSheet) {
