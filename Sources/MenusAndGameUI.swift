@@ -212,6 +212,34 @@ struct MinervaSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmWorldReset = false
 
+    // Persistent client preferences. These are stored independently from world saves.
+    @AppStorage("minerva.difficulty") private var difficulty = "Normal"
+    @AppStorage("minerva.autoJump") private var autoJump = false
+    @AppStorage("minerva.viewBobbing") private var viewBobbing = true
+    @AppStorage("minerva.showCoordinates") private var showCoordinates = true
+    @AppStorage("minerva.showSubtitles") private var showSubtitles = false
+    @AppStorage("minerva.reducedMotion") private var reducedMotion = false
+    @AppStorage("minerva.leftHanded") private var leftHanded = false
+    @AppStorage("minerva.invertLook") private var invertLook = false
+    @AppStorage("minerva.touchSensitivity") private var touchSensitivity = 1.0
+    @AppStorage("minerva.uiScale") private var uiScale = 1.0
+    @AppStorage("minerva.renderDistance") private var renderDistance = 1
+    @AppStorage("minerva.graphics") private var graphics = "Balanced"
+    @AppStorage("minerva.clouds") private var clouds = true
+    @AppStorage("minerva.particles") private var particles = true
+    @AppStorage("minerva.fancyLeaves") private var fancyLeaves = true
+    @AppStorage("minerva.screenShake") private var screenShake = true
+    @AppStorage("minerva.musicVolume") private var musicVolume = 70.0
+    @AppStorage("minerva.soundVolume") private var soundVolume = 80.0
+    @AppStorage("minerva.ambientVolume") private var ambientVolume = 70.0
+    @AppStorage("minerva.autosave") private var autosave = true
+    @AppStorage("minerva.mobSpawning") private var mobSpawning = true
+    @AppStorage("minerva.weatherCycle") private var weatherCycle = true
+    @AppStorage("minerva.fireSpread") private var fireSpread = true
+    @AppStorage("minerva.keepInventory") private var keepInventory = false
+    @AppStorage("minerva.friendlyFire") private var friendlyFire = false
+    @AppStorage("minerva.showFPS") private var showFPS = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -219,21 +247,68 @@ struct MinervaSettingsView: View {
                     Picker("Game mode", selection: Binding(get: { world.gameMode }, set: { world.setGameMode($0) })) {
                         ForEach(GameMode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
                     }
+                    Picker("Difficulty", selection: $difficulty) {
+                        ForEach(["Peaceful", "Easy", "Normal", "Hard"], id: \.self) { Text($0) }
+                    }
                     Picker("Dimension", selection: Binding(get: { world.activeDimension }, set: { world.selectDimension($0) })) {
                         ForEach(GameDimension.allCases) { dimension in Text(dimension.rawValue).tag(dimension) }
                     }
                     Picker("World slot", selection: Binding(get: { world.activeSlot }, set: { world.selectWorldSlot($0) })) {
                         ForEach(1...3, id: \.self) { slot in Text("World \(slot)").tag(slot) }
                     }
-                }
-                Section("World") {
+                    Toggle("Auto-jump preference", isOn: $autoJump)
+                    Toggle("Keep inventory on defeat", isOn: $keepInventory)
+                    Toggle("Mob spawning", isOn: $mobSpawning)
                     Toggle("Automatic day / night cycle", isOn: Binding(get: { world.isAutoCycleEnabled }, set: { _ in world.toggleAutoCycle() }))
+                    Toggle("Weather cycle preference", isOn: $weatherCycle)
+                }
+                Section("Video and Graphics") {
+                    Picker("Graphics quality", selection: $graphics) {
+                        ForEach(["Fast", "Balanced", "Fancy"], id: \.self) { Text($0) }
+                    }
+                    Picker("Render distance", selection: $renderDistance) {
+                        Text("Near").tag(0); Text("Normal").tag(1); Text("Far").tag(2)
+                    }
+                    Toggle("Clouds", isOn: $clouds)
+                    Toggle("Particles preference", isOn: $particles)
+                    Toggle("Fancy foliage preference", isOn: $fancyLeaves)
+                    Toggle("View bobbing preference", isOn: $viewBobbing)
+                    Toggle("Screen shake", isOn: $screenShake)
+                    Toggle("Show FPS counter preference", isOn: $showFPS)
+                }
+                Section("Controls") {
+                    Button("Switch camera perspective") { world.toggleCameraMode() }
+                    Text("Current camera: \(world.cameraMode.rawValue)").foregroundStyle(.secondary)
+                    Toggle("Left-handed layout preference", isOn: $leftHanded)
+                    Toggle("Invert look preference", isOn: $invertLook)
+                    Slider(value: $touchSensitivity, in: 0.4...2.0, step: 0.1) {
+                        Text("Touch sensitivity: \(touchSensitivity, specifier: "%.1f")x")
+                    }
+                    Slider(value: $uiScale, in: 0.75...1.25, step: 0.05) {
+                        Text("Interface scale: \(Int(uiScale * 100))%")
+                    }
+                }
+                Section("Audio") {
+                    Slider(value: $musicVolume, in: 0...100, step: 5) { Text("Music: \(Int(musicVolume))%") }
+                    Slider(value: $soundVolume, in: 0...100, step: 5) { Text("Sound effects: \(Int(soundVolume))%") }
+                    Slider(value: $ambientVolume, in: 0...100, step: 5) { Text("Ambient sounds: \(Int(ambientVolume))%") }
+                    Toggle("Subtitles preference", isOn: $showSubtitles)
+                }
+                Section("World Rules") {
+                    Toggle("Autosave preference", isOn: $autosave)
+                    Toggle("Fire spread preference", isOn: $fireSpread)
+                    Toggle("Friendly fire preference", isOn: $friendlyFire)
                     Toggle("Multiplayer LAN", isOn: Binding(get: { world.multiplayerEnabled }, set: { _ in world.toggleMultiplayerLobby() }))
                     Button("Regenerate current world", role: .destructive) { confirmWorldReset = true }
                 }
-                Section("Camera") {
-                    Button("Switch camera perspective") { world.toggleCameraMode() }
-                    Text("Current: \(world.cameraMode.rawValue)").foregroundStyle(.secondary)
+                Section("Accessibility") {
+                    Toggle("Show coordinates", isOn: $showCoordinates)
+                    Toggle("Reduced motion preference", isOn: $reducedMotion)
+                    Text("Preferences marked as such are saved now; options that need engine support are not yet applied to gameplay.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section {
+                    Button("Reset settings to defaults", role: .destructive) { resetPreferences() }
                 }
             }
             .navigationTitle("Settings")
@@ -246,6 +321,16 @@ struct MinervaSettingsView: View {
                 Text("The current world and its saved changes in this dimension will be replaced.")
             }
         }
+    }
+
+    private func resetPreferences() {
+        difficulty = "Normal"; autoJump = false; viewBobbing = true; showCoordinates = true
+        showSubtitles = false; reducedMotion = false; leftHanded = false; invertLook = false
+        touchSensitivity = 1.0; uiScale = 1.0; renderDistance = 1; graphics = "Balanced"
+        clouds = true; particles = true; fancyLeaves = true; screenShake = true
+        musicVolume = 70; soundVolume = 80; ambientVolume = 70; autosave = true
+        mobSpawning = true; weatherCycle = true; fireSpread = true; keepInventory = false
+        friendlyFire = false; showFPS = false
     }
 }
 
@@ -653,6 +738,7 @@ struct VoxelGameView: View {
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
+                    .padding(.trailing, 64)
                 }
                 .padding(.horizontal)
 

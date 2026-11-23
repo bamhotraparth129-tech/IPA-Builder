@@ -1375,35 +1375,38 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             boatTravelDistance = 0
             isInBoat = false
         }
-        spawnMobsNearPlayer(aroundX: 0, z: 0)
-        if let savedVillagers {
-            for mob in mobs where mob.kind == .villager { mob.node.removeFromParentNode() }
-            mobs.removeAll { $0.kind == .villager }
-            for entry in savedVillagers {
-                guard let profession = VillagerProfession(rawValue: entry.profession) else { continue }
-                let position = SIMD3<Float>(entry.x, entry.y, entry.z)
-                let node = makeMobNode(kind: .villager)
-                node.name = "mob_\(entry.id.uuidString)"
-                node.position = SCNVector3(position.x, position.y, position.z)
-                mobsRootNode.addChildNode(node)
-                let villager = WorldMob(id: entry.id, kind: .villager, position: position, yaw: entry.yaw, hp: max(1, entry.hp), wanderTimer: 1.5, node: node)
-                villager.profession = profession
-                if let x = entry.homeX, let y = entry.homeY, let z = entry.homeZ {
-                    villager.homePosition = SIMD3<Float>(x, y, z)
-                }
-                if let x = entry.workX, let y = entry.workY, let z = entry.workZ {
-                    villager.workstationPosition = SIMD3<Float>(x, y, z)
-                }
-                villager.isBaby = entry.isBaby ?? false
-                villager.ageTimer = entry.ageTimer ?? 0
-                if villager.homePosition == nil || villager.workstationPosition == nil {
-                    assignVillagerDestinations(villager)
-                }
-                mobs.append(villager)
+        // Defer expensive entity construction until the first frame can render.
+        // Terrain and the player become visible first, avoiding a long blank/frozen
+        // transition while dozens of animated SceneKit nodes are created.
+        statusMessage = "World loaded. Preparing nearby creatures…"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self else { return }
+            if UserDefaults.standard.object(forKey: "minerva.mobSpawning") as? Bool != false {
+                self.spawnMobsNearPlayer(aroundX: 0, z: 0)
             }
+            if let savedVillagers {
+                for mob in self.mobs where mob.kind == .villager { mob.node.removeFromParentNode() }
+                self.mobs.removeAll { $0.kind == .villager }
+                for entry in savedVillagers {
+                    guard let profession = VillagerProfession(rawValue: entry.profession) else { continue }
+                    let position = SIMD3<Float>(entry.x, entry.y, entry.z)
+                    let node = self.makeMobNode(kind: .villager)
+                    node.name = "mob_\(entry.id.uuidString)"
+                    node.position = SCNVector3(position.x, position.y, position.z)
+                    self.mobsRootNode.addChildNode(node)
+                    let villager = WorldMob(id: entry.id, kind: .villager, position: position, yaw: entry.yaw, hp: max(1, entry.hp), wanderTimer: 1.5, node: node)
+                    villager.profession = profession
+                    if let x = entry.homeX, let y = entry.homeY, let z = entry.homeZ { villager.homePosition = SIMD3<Float>(x, y, z) }
+                    if let x = entry.workX, let y = entry.workY, let z = entry.workZ { villager.workstationPosition = SIMD3<Float>(x, y, z) }
+                    villager.isBaby = entry.isBaby ?? false
+                    villager.ageTimer = entry.ageTimer ?? 0
+                    if villager.homePosition == nil || villager.workstationPosition == nil { self.assignVillagerDestinations(villager) }
+                    self.mobs.append(villager)
+                }
+            }
+            self.restoreSavedPets(savedPets)
+            self.statusMessage = "Loaded \(self.activeDimension.rawValue)"
         }
-        restoreSavedPets(savedPets)
-        statusMessage = "Loaded \(activeDimension.rawValue)"
     }
 
     private func applyRestoredBlockVisualStates() {
@@ -2463,7 +2466,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func spawnMobsNearPlayer(aroundX cx: Int, z cz: Int) {
-        while mobs.count > 14 {
+        while mobs.count > 9 {
             let removed = mobs.removeFirst()
             removed.node.removeFromParentNode()
         }
@@ -2494,7 +2497,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         case .endgame:
             kinds = [.enderman, .enderman, .slime, .skeleton, .zombie, .blaze]
         }
-        for idx in 0..<kinds.count {
+        for idx in 0..<min(kinds.count, 6) {
             let offsetX = (idx % 2 == 0 ? 1 : -1) * Int.random(in: 4...9)
             let offsetZ = (idx < 2 ? 1 : -1) * Int.random(in: 4...9)
             let mx = cx + offsetX
@@ -2533,8 +2536,8 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
 
         // Hostile mobs can also inhabit nearby cave pockets instead of every spawn
         // being placed on the surface. The cap keeps the scene workload bounded.
-        if activeDimension == .overworld && mobs.count < 14 {
-            for _ in 0..<10 where mobs.count < 14 {
+        if activeDimension == .overworld && mobs.count < 9 {
+            for _ in 0..<4 where mobs.count < 9 {
                 let caveX = cx + Int.random(in: -7...7)
                 let caveZ = cz + Int.random(in: -7...7)
                 let surface = terrainHeight(x: caveX, z: caveZ, biome: BiomeType.biomeAt(x: caveX, z: caveZ, dimension: .overworld))

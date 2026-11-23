@@ -74,7 +74,7 @@ struct VoxelSceneView: UIViewRepresentable {
             let topHUD = y < 0.15
             let bottomHUD = y > 0.69
             let leftMovementPad = x < 0.29 && y > 0.34
-            let rightActionPad = x > 0.69 && y > 0.34
+            let rightActionPad = x > 0.50 && y > 0.30
             return !(topHUD || bottomHUD || leftMovementPad || rightActionPad)
         }
 
