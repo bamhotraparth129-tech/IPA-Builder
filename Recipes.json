@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "recipes": [
-    {"id": "planks_from_log", "ingredients": [{"item": "log", "count": 1}], "result": {"item": "planks", "count": 4}},
-    {"id": "sticks", "ingredients": [{"item": "planks", "count": 2}], "result": {"item": "stick", "count": 4}}
-  ]
-}
