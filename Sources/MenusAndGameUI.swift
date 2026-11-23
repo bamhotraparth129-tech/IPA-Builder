@@ -284,6 +284,7 @@ struct VoxelGameView: View {
     @State private var isShowingMainMenu = true
     @State private var isShowingSettings = false
     @State private var isShowingHowToPlay = false
+    @State private var isShowingBlockPicker = false
 
     var body: some View {
         Group {
@@ -534,12 +535,6 @@ struct VoxelGameView: View {
                     }
 
                     HStack(spacing: 10) {
-                        Label("HP \(world.health)/20", systemImage: "heart.fill")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.red)
-                        Label("Food \(world.hunger)/20", systemImage: "fork.knife")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.orange)
                         Label("Lv \(world.experienceLevel)", systemImage: "sparkles")
                             .font(.caption2.bold())
                             .foregroundStyle(.green)
@@ -661,50 +656,85 @@ struct VoxelGameView: View {
                 }
                 .padding(.horizontal)
 
-                // Nine-slot quick-access hotbar
-                HStack(spacing: 5) {
-                    ForEach(0..<9, id: \.self) { index in
-                        HotbarSlotButton(
-                            block: world.hotbarSlots[index],
-                            quantity: world.count(for: world.hotbarSlots[index]),
-                            isSelected: world.hotbarSelection == index,
-                            onSelect: { world.selectHotbarSlot(index) }
-                        )
+                // Minecraft-style survival HUD: hearts and hunger directly above the centered 9-slot hotbar.
+                VStack(spacing: 4) {
+                    if world.gameMode == .survival {
+                        MinecraftHealthHungerBar(health: world.health, hunger: world.hunger)
+                            .frame(maxWidth: 430)
+                    } else {
+                        Text("\(world.experienceLevel)  •  CREATIVE")
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+
+                    HStack(spacing: 2) {
+                        ForEach(0..<9, id: \.self) { index in
+                            HotbarSlotButton(
+                                block: world.hotbarSlots[index],
+                                quantity: world.count(for: world.hotbarSlots[index]),
+                                isSelected: world.hotbarSelection == index,
+                                onSelect: { world.selectHotbarSlot(index) }
+                            )
+                            .frame(width: 46, height: 48)
+                        }
+                    }
+                    .padding(4)
+                    .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.55), lineWidth: 1))
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { isShowingBlockPicker.toggle() }
+                    } label: {
+                        Label(isShowingBlockPicker ? "CLOSE BLOCKS" : "BLOCKS", systemImage: isShowingBlockPicker ? "chevron.down" : "square.grid.3x3.fill")
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.65), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    if isShowingBlockPicker {
+                        VStack(spacing: 5) {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 5) {
+                                    ForEach(BlockCategory.allCases) { category in
+                                        CategoryFilterButton(
+                                            category: category,
+                                            isSelected: world.selectedCategory == category
+                                        ) { world.selectedCategory = category }
+                                    }
+                                }
+                                .padding(.horizontal, 3)
+                            }
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(world.visibleBlocks) { block in
+                                        BlockPaletteButton(
+                                            block: block,
+                                            quantity: world.count(for: block),
+                                            isSelected: world.selectedBlock == block
+                                        ) {
+                                            world.selectedBlock = block
+                                            world.hotbarSlots[world.hotbarSelection] = block
+                                            world.activeTool = .place
+                                            withAnimation(.easeInOut(duration: 0.18)) { isShowingBlockPicker = false }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 3)
+                            }
+                            .frame(height: 58)
+                        }
+                        .padding(7)
+                        .frame(maxWidth: 560)
+                        .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 8)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(BlockCategory.allCases) { category in
-                            CategoryFilterButton(
-                                category: category,
-                                isSelected: world.selectedCategory == category
-                            ) {
-                                world.selectedCategory = category
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(world.visibleBlocks) { block in
-                            BlockPaletteButton(
-                                block: block,
-                                quantity: world.count(for: block),
-                                isSelected: world.selectedBlock == block
-                            ) {
-                                world.selectedBlock = block
-                                world.hotbarSlots[world.hotbarSelection] = block
-                                world.activeTool = .place
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .padding(.bottom, 10)
+                .padding(.bottom, 5)
             }
             }
         }
@@ -765,6 +795,40 @@ struct VoxelGameView: View {
 /// Kept separate from VoxelGameView so Swift's type checker does not have to
 /// infer the entire block-palette button as part of the already-large HUD view.
 
+private struct MinecraftHealthHungerBar: View {
+    let health: Int
+    let hunger: Int
+
+    var body: some View {
+        HStack(alignment: .center) {
+            HStack(spacing: 2) {
+                ForEach(0..<10, id: \.self) { index in
+                    let value = health - index * 2
+                    Image(systemName: value >= 2 ? "heart.fill" : (value == 1 ? "heart.lefthalf.fill" : "heart"))
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(value > 0 ? Color.red : Color.white.opacity(0.55))
+                        .shadow(color: .black.opacity(0.85), radius: 1, x: 1, y: 1)
+                }
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 1) {
+                ForEach(0..<10, id: \.self) { index in
+                    let value = hunger - index * 2
+                    Text("🍗")
+                        .font(.system(size: 14))
+                        .opacity(value >= 2 ? 1 : (value == 1 ? 0.55 : 0.22))
+                        .shadow(color: .black.opacity(0.85), radius: 1, x: 1, y: 1)
+                }
+            }
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Color.black.opacity(0.38), in: RoundedRectangle(cornerRadius: 4))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Health \(health) of 20. Hunger \(hunger) of 20.")
+    }
+}
+
 private struct HotbarSlotButton: View {
     let block: BlockType
     let quantity: Int
@@ -782,16 +846,19 @@ private struct HotbarSlotButton: View {
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color.white)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(2)
             .background(
-                isSelected ? Color.white.opacity(0.30) : Color.black.opacity(0.55),
-                in: RoundedRectangle(cornerRadius: 8)
+                isSelected
+                    ? Color(red: 0.58, green: 0.58, blue: 0.58)
+                    : Color(red: 0.28, green: 0.28, blue: 0.28),
+                in: RoundedRectangle(cornerRadius: 2)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.yellow : Color.white.opacity(0.25), lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(isSelected ? Color.white : Color.black.opacity(0.8), lineWidth: isSelected ? 2 : 1)
             )
+            .shadow(color: .black.opacity(0.35), radius: 1, x: 1, y: 1)
         }
         .buttonStyle(.plain)
     }

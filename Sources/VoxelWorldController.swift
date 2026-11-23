@@ -129,6 +129,9 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private var blockNodes: [BlockCoord: SCNNode] = [:]
     private var chunkMeshNodes: [ChunkCoord: SCNNode] = [:]
     private var loadedChunks: Set<ChunkCoord> = []
+    // Chunk creation is queued so entering a world never generates the full view radius in one frame.
+    private var pendingChunkQueue: [ChunkCoord] = []
+    private var pendingChunkSet: Set<ChunkCoord> = []
     private var modifiedCoords: Set<BlockCoord> = []
     private var openedChests: Set<BlockCoord> = []
     private var openDoors: Set<BlockCoord> = []
@@ -153,6 +156,9 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private var sharedGeometries: [BlockType: SCNGeometry] = [:]
     private var cloudNodes: [SCNNode] = []
     private var weatherNodes: [SCNNode] = []
+    // Serial background persistence keeps JSON encoding and disk writes out of
+    // the interactive main-thread path while preserving save order.
+    private let saveQueue = DispatchQueue(label: "Minerva.WorldSave", qos: .utility)
 
     private let chunkSize = 12
     private let chunkRadius = 1
@@ -1251,6 +1257,8 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         miningFatigueRemaining = 0
         blocks.removeAll()
         loadedChunks.removeAll()
+        pendingChunkQueue.removeAll()
+        pendingChunkSet.removeAll()
         modifiedCoords.removeAll()
         openDoors.removeAll()
         redstoneToggledDoors.removeAll()
@@ -1407,6 +1415,8 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     func regenerateNewWorld() {
+        // Finish earlier queued writes before deleting this world's save file.
+        saveQueue.sync {}
         if FileManager.default.fileExists(atPath: saveURL.path) {
             try? FileManager.default.removeItem(at: saveURL)
         }
@@ -1423,6 +1433,8 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         boatAutosaveTimer = 0
         blocks.removeAll()
         loadedChunks.removeAll()
+        pendingChunkQueue.removeAll()
+        pendingChunkSet.removeAll()
         modifiedCoords.removeAll()
         openDoors.removeAll()
         redstoneToggledDoors.removeAll()
@@ -1479,12 +1491,42 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             }
         }
 
+        // Drop queued chunks that are no longer near the player. A forced refresh
+        // rebuilds the queue in nearest-first order, but still processes only one
+        // chunk per maintenance tick instead of freezing the UI for the full radius.
+        if force {
+            pendingChunkQueue.removeAll()
+            pendingChunkSet.removeAll()
+        } else {
+            pendingChunkQueue.removeAll { !desired.contains($0) || loadedChunks.contains($0) }
+            pendingChunkSet = Set(pendingChunkQueue)
+        }
+
+        let missing = desired.subtracting(loadedChunks).subtracting(pendingChunkSet)
+        let orderedMissing = missing.sorted { lhs, rhs in
+            let ldx = lhs.cx - center.cx
+            let ldz = lhs.cz - center.cz
+            let rdx = rhs.cx - center.cx
+            let rdz = rhs.cz - center.cz
+            let ld = ldx * ldx + ldz * ldz
+            let rd = rdx * rdx + rdz * rdz
+            if ld != rd { return ld < rd }
+            if lhs.cx != rhs.cx { return lhs.cx < rhs.cx }
+            return lhs.cz < rhs.cz
+        }
+        pendingChunkQueue.append(contentsOf: orderedMissing)
+        pendingChunkSet.formUnion(orderedMissing)
+
         var generatedNewChunk = false
-        for chunk in desired where force || !loadedChunks.contains(chunk) {
-            generateChunk(chunk)
-            loadedChunks.insert(chunk)
-            rebuildMergedChunkNode(chunk)
-            generatedNewChunk = true
+        if let nextChunk = pendingChunkQueue.first {
+            pendingChunkQueue.removeFirst()
+            pendingChunkSet.remove(nextChunk)
+            if desired.contains(nextChunk) && !loadedChunks.contains(nextChunk) {
+                generateChunk(nextChunk)
+                loadedChunks.insert(nextChunk)
+                rebuildMergedChunkNode(nextChunk)
+                generatedNewChunk = true
+            }
         }
 
         if generatedNewChunk && !force {
@@ -3673,8 +3715,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                               guardZ: mob.guardPosition?.z)
             }
         )
-        if let data = try? JSONEncoder().encode(snapshot) {
-            try? data.write(to: saveURL, options: Data.WritingOptions.atomic)
+        let destinationURL = saveURL
+        saveQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            try? data.write(to: destinationURL, options: .atomic)
         }
     }
 

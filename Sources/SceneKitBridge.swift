@@ -26,6 +26,7 @@ struct VoxelSceneView: UIViewRepresentable {
         pan.maximumNumberOfTouches = 1
         pan.cancelsTouchesInView = false
         pan.delaysTouchesBegan = false
+        pan.delegate = context.coordinator
         view.addGestureRecognizer(pan)
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
@@ -33,6 +34,7 @@ struct VoxelSceneView: UIViewRepresentable {
         tap.cancelsTouchesInView = false
         tap.delaysTouchesBegan = false
         tap.require(toFail: pan)
+        tap.delegate = context.coordinator
         view.addGestureRecognizer(tap)
 
         context.coordinator.scnView = view
@@ -51,12 +53,30 @@ struct VoxelSceneView: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let controller: VoxelWorldController
         weak var scnView: SCNView?
         private var lastPanPoint: CGPoint?
 
         init(controller: VoxelWorldController) { self.controller = controller }
+
+        // The SceneKit view sits underneath the SwiftUI HUD. Explicitly reject
+        // touches in HUD zones so camera-look and world-tap recognizers cannot
+        // steal movement, hotbar, category-strip, or action-button touches.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let view = gestureRecognizer.view else { return true }
+            let point = touch.location(in: view)
+            let width = max(view.bounds.width, 1)
+            let height = max(view.bounds.height, 1)
+            let x = point.x / width
+            let y = point.y / height
+
+            let topHUD = y < 0.15
+            let bottomHUD = y > 0.69
+            let leftMovementPad = x < 0.29 && y > 0.34
+            let rightActionPad = x > 0.69 && y > 0.34
+            return !(topHUD || bottomHUD || leftMovementPad || rightActionPad)
+        }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             let loc = gesture.location(in: gesture.view)
