@@ -194,6 +194,12 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private var lastFrameTime: TimeInterval?
     // Keep SwiftUI/state publication work off the 60 FPS render cadence.
     private var lastMainThreadUpdateTime: TimeInterval = 0
+    // Expensive world maintenance is deliberately rate-limited independently
+    // from the render callback so large worlds cannot monopolize the UI thread.
+    private var lastChunkMaintenanceTime: TimeInterval = 0
+    private var lastBlockVisibilityUpdateTime: TimeInterval = 0
+    private var lastSensorUpdateTime: TimeInterval = 0
+    private var mobSimulationAccumulator: Float = 0
     private var pendingNightCycle: Bool?
     private var pendingWeatherCycle = false
     private var nightProgress: Float = 0.0
@@ -1483,6 +1489,9 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     }
 
     private func updateChunksAroundPlayer(force: Bool = false) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if !force && now - lastChunkMaintenanceTime < 0.45 { return }
+        lastChunkMaintenanceTime = now
         let px = Int(floor(playerPos.x))
         let pz = Int(floor(playerPos.z))
         let center = chunkCoord(forWorldX: px, z: pz)
@@ -3844,7 +3853,10 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let dt: Float
         if let prev = lastFrameTime { dt = min(0.05, max(0.001, Float(time - prev))) } else { dt = 0.016 }
         lastFrameTime = time
-        updateRedstoneSensors(at: time)
+        if time - lastSensorUpdateTime >= 0.12 {
+            lastSensorUpdateTime = time
+            updateRedstoneSensors(at: time)
+        }
         miningFatigueRemaining = max(0, miningFatigueRemaining - dt)
         dolphinGuideAchievementTimer = max(0, dolphinGuideAchievementTimer - dt)
 
@@ -4006,14 +4018,24 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         }
 
         }
-        updateMobsArrowsAndDrops(dt: dt)
-        updateVillagerSchedules(dt: dt)
+        mobSimulationAccumulator += dt
+        if mobSimulationAccumulator >= (1.0 / 20.0) {
+            let simulationDelta = min(0.10, mobSimulationAccumulator)
+            mobSimulationAccumulator = 0
+            updateMobsArrowsAndDrops(dt: simulationDelta)
+            updateVillagerSchedules(dt: simulationDelta)
+        }
 
-        let viewSq = maxViewDistance * maxViewDistance
-        for (coord, node) in blockNodes {
-            let dx = coord.scnVector.x - playerPos.x
-            let dz = coord.scnVector.z - playerPos.z
-            node.isHidden = (dx * dx + dz * dz) > viewSq
+        // Individual special-block nodes can number in the thousands. Rechecking
+        // every node at render frequency caused avoidable frame stalls.
+        if time - lastBlockVisibilityUpdateTime >= 0.30 {
+            lastBlockVisibilityUpdateTime = time
+            let viewSq = maxViewDistance * maxViewDistance
+            for (coord, node) in blockNodes {
+                let dx = coord.scnVector.x - playerPos.x
+                let dz = coord.scnVector.z - playerPos.z
+                node.isHidden = (dx * dx + dz * dz) > viewSq
+            }
         }
 
         if gameMode == .survival && wishLen > 0.01 { hungerDrainTimer += dt }

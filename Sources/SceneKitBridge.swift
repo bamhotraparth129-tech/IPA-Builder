@@ -71,10 +71,11 @@ struct VoxelSceneView: UIViewRepresentable {
             let x = point.x / width
             let y = point.y / height
 
-            let topHUD = y < 0.15
-            let bottomHUD = y > 0.69
-            let leftMovementPad = x < 0.29 && y > 0.34
-            let rightActionPad = x > 0.50 && y > 0.30
+            let topHUD = y < 0.22
+            let bottomHUD = y > 0.70
+            let leftMovementPad = x < 0.30 && y > 0.34
+            // Match the actual right-hand control column near the screen edge.
+            let rightActionPad = x > 0.70 && y > 0.30
             return !(topHUD || bottomHUD || leftMovementPad || rightActionPad)
         }
 

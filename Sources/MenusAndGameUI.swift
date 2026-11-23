@@ -281,17 +281,28 @@ struct MinervaSettingsView: View {
                     Text("Current camera: \(world.cameraMode.rawValue)").foregroundStyle(.secondary)
                     Toggle("Left-handed layout preference", isOn: $leftHanded)
                     Toggle("Invert look preference", isOn: $invertLook)
-                    Slider(value: $touchSensitivity, in: 0.4...2.0, step: 0.1) {
-                        Text("Touch sensitivity: \(touchSensitivity, specifier: "%.1f")x")
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Touch look sensitivity"); Spacer(); Text("\(touchSensitivity, specifier: "%.1f")×").monospacedDigit().foregroundStyle(.secondary) }
+                        Slider(value: $touchSensitivity, in: 0.4...2.0, step: 0.1, label: { Text("Touch look sensitivity") })
                     }
-                    Slider(value: $uiScale, in: 0.75...1.25, step: 0.05) {
-                        Text("Interface scale: \(Int(uiScale * 100))%")
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Interface size"); Spacer(); Text("\(Int(uiScale * 100))%").monospacedDigit().foregroundStyle(.secondary) }
+                        Slider(value: $uiScale, in: 0.75...1.25, step: 0.05, label: { Text("Interface size") })
                     }
                 }
                 Section("Audio") {
-                    Slider(value: $musicVolume, in: 0...100, step: 5) { Text("Music: \(Int(musicVolume))%") }
-                    Slider(value: $soundVolume, in: 0...100, step: 5) { Text("Sound effects: \(Int(soundVolume))%") }
-                    Slider(value: $ambientVolume, in: 0...100, step: 5) { Text("Ambient sounds: \(Int(ambientVolume))%") }
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Music volume"); Spacer(); Text("\(Int(musicVolume))%").monospacedDigit().foregroundStyle(.secondary) }
+                        Slider(value: $musicVolume, in: 0...100, step: 5, label: { Text("Music volume") })
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Sound effects volume"); Spacer(); Text("\(Int(soundVolume))%").monospacedDigit().foregroundStyle(.secondary) }
+                        Slider(value: $soundVolume, in: 0...100, step: 5, label: { Text("Sound effects volume") })
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Ambient sounds volume"); Spacer(); Text("\(Int(ambientVolume))%").monospacedDigit().foregroundStyle(.secondary) }
+                        Slider(value: $ambientVolume, in: 0...100, step: 5, label: { Text("Ambient sounds volume") })
+                    }
                     Toggle("Subtitles preference", isOn: $showSubtitles)
                 }
                 Section("World Rules") {
@@ -395,8 +406,8 @@ struct VoxelGameView: View {
                 .allowsHitTesting(false)
 
             VStack(spacing: 7) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 5) {
                     Button {
                         world.pauseGame()
                         isShowingMainMenu = true
@@ -649,9 +660,12 @@ struct VoxelGameView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
                 .padding(.vertical, 6)
                 .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 12))
+                .clipped()
 
                 Spacer()
 
@@ -738,9 +752,9 @@ struct VoxelGameView: View {
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
-                    .padding(.trailing, 64)
+                    .padding(.trailing, 8)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 8)
 
                 // Minecraft-style survival HUD: hearts and hunger directly above the centered 9-slot hotbar.
                 VStack(spacing: 4) {
