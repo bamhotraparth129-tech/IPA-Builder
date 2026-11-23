@@ -406,7 +406,7 @@ struct VoxelGameView: View {
                 .allowsHitTesting(false)
 
             VStack(spacing: 7) {
-                ScrollView(.horizontal, showsIndicators: true) {
+                ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 5) {
                     Button {
                         world.pauseGame()
@@ -566,9 +566,10 @@ struct VoxelGameView: View {
                         .background(.ultraThinMaterial, in: Capsule())
                     }
                 }
-                .padding(.horizontal, 2)
-                .padding(.horizontal)
-                .padding(.top, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
+                .padding(.horizontal, 6)
+                .padding(.top, 6)
 
                 VStack(spacing: 4) {
                     HStack(spacing: 6) {
@@ -752,9 +753,11 @@ struct VoxelGameView: View {
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
-                    .padding(.trailing, 8)
+                    .padding(.trailing, 2)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, alignment: .bottom)
+                .padding(.horizontal, 4)
 
                 // Minecraft-style survival HUD: hearts and hunger directly above the centered 9-slot hotbar.
                 VStack(spacing: 4) {

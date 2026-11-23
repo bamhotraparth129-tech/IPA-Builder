@@ -1490,7 +1490,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
 
     private func updateChunksAroundPlayer(force: Bool = false) {
         let now = ProcessInfo.processInfo.systemUptime
-        if !force && now - lastChunkMaintenanceTime < 0.45 { return }
+        if !force && now - lastChunkMaintenanceTime < 1.00 { return }
         lastChunkMaintenanceTime = now
         let px = Int(floor(playerPos.x))
         let pz = Int(floor(playerPos.z))
@@ -4028,7 +4028,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
 
         // Individual special-block nodes can number in the thousands. Rechecking
         // every node at render frequency caused avoidable frame stalls.
-        if time - lastBlockVisibilityUpdateTime >= 0.30 {
+        if time - lastBlockVisibilityUpdateTime >= 1.00 {
             lastBlockVisibilityUpdateTime = time
             let viewSq = maxViewDistance * maxViewDistance
             for (coord, node) in blockNodes {
