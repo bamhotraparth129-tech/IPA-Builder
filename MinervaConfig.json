@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "chunkSize": 16,
-  "worldHeight": 64,
-  "initialRenderDistance": 2,
-  "workerCount": 2,
-  "notes": "Starter configuration. Tune after device profiling."
-}
