@@ -1385,7 +1385,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         // Terrain and the player become visible first, avoiding a long blank/frozen
         // transition while dozens of animated SceneKit nodes are created.
         statusMessage = "World loaded. Preparing nearby creatures…"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
             guard let self else { return }
             if UserDefaults.standard.object(forKey: "minerva.mobSpawning") as? Bool != false {
                 self.spawnMobsNearPlayer(aroundX: 0, z: 0)
@@ -1490,7 +1490,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
 
     private func updateChunksAroundPlayer(force: Bool = false) {
         let now = ProcessInfo.processInfo.systemUptime
-        if !force && now - lastChunkMaintenanceTime < 1.00 { return }
+        if !force && now - lastChunkMaintenanceTime < 1.75 { return }
         lastChunkMaintenanceTime = now
         let px = Int(floor(playerPos.x))
         let pz = Int(floor(playerPos.z))
@@ -1541,10 +1541,6 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
             }
         }
 
-        if generatedNewChunk && !force {
-            spawnMobsNearPlayer(aroundX: px, z: pz)
-        }
-
         for chunk in loadedChunks.subtracting(desired) {
             unloadChunk(chunk)
             loadedChunks.remove(chunk)
@@ -1562,19 +1558,18 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         let minZ = chunk.cz * chunkSize
         let maxZ = minZ + chunkSize - 1
 
-        var positions: [SCNVector3] = []
-        var uvs: [CGPoint] = []
-        var indices: [Int32] = []
+        var positionsByType: [BlockType: [SCNVector3]] = [:]
+        var uvsByType: [BlockType: [CGPoint]] = [:]
+        var indicesByType: [BlockType: [Int32]] = [:]
 
-        let faces: [((Float, Float, Float), [SIMD3<Float>], (Int, Int, Int))] = [
-            ((1, 0, 0), [SIMD3(0.5, -0.5, 0.5), SIMD3(0.5, -0.5, -0.5), SIMD3(0.5, 0.5, -0.5), SIMD3(0.5, 0.5, 0.5)], (1, 0, 0)),
-            ((-1, 0, 0), [SIMD3(-0.5, -0.5, -0.5), SIMD3(-0.5, -0.5, 0.5), SIMD3(-0.5, 0.5, 0.5), SIMD3(-0.5, 0.5, -0.5)], (-1, 0, 0)),
-            ((0, 1, 0), [SIMD3(-0.5, 0.5, 0.5), SIMD3(0.5, 0.5, 0.5), SIMD3(0.5, 0.5, -0.5), SIMD3(-0.5, 0.5, -0.5)], (0, 1, 0)),
-            ((0, -1, 0), [SIMD3(-0.5, -0.5, -0.5), SIMD3(0.5, -0.5, -0.5), SIMD3(0.5, -0.5, 0.5), SIMD3(-0.5, -0.5, 0.5)], (0, -1, 0)),
-            ((0, 0, 1), [SIMD3(-0.5, -0.5, 0.5), SIMD3(-0.5, 0.5, 0.5), SIMD3(0.5, 0.5, 0.5), SIMD3(0.5, -0.5, 0.5)], (0, 0, 1)),
-            ((0, 0, -1), [SIMD3(0.5, -0.5, -0.5), SIMD3(0.5, 0.5, -0.5), SIMD3(-0.5, 0.5, -0.5), SIMD3(-0.5, -0.5, -0.5)], (0, 0, -1))
+        let faces: [([SIMD3<Float>], (Int, Int, Int))] = [
+            ([SIMD3(0.5, -0.5, 0.5), SIMD3(0.5, -0.5, -0.5), SIMD3(0.5, 0.5, -0.5), SIMD3(0.5, 0.5, 0.5)], (1, 0, 0)),
+            ([SIMD3(-0.5, -0.5, -0.5), SIMD3(-0.5, -0.5, 0.5), SIMD3(-0.5, 0.5, 0.5), SIMD3(-0.5, 0.5, -0.5)], (-1, 0, 0)),
+            ([SIMD3(-0.5, 0.5, 0.5), SIMD3(0.5, 0.5, 0.5), SIMD3(0.5, 0.5, -0.5), SIMD3(-0.5, 0.5, -0.5)], (0, 1, 0)),
+            ([SIMD3(-0.5, -0.5, -0.5), SIMD3(0.5, -0.5, -0.5), SIMD3(0.5, -0.5, 0.5), SIMD3(-0.5, -0.5, 0.5)], (0, -1, 0)),
+            ([SIMD3(-0.5, -0.5, 0.5), SIMD3(-0.5, 0.5, 0.5), SIMD3(0.5, 0.5, 0.5), SIMD3(0.5, -0.5, 0.5)], (0, 0, 1)),
+            ([SIMD3(0.5, -0.5, -0.5), SIMD3(0.5, 0.5, -0.5), SIMD3(-0.5, 0.5, -0.5), SIMD3(-0.5, -0.5, -0.5)], (0, 0, -1))
         ]
-
         let quadUVs = [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1), CGPoint(x: 1, y: 0)]
 
         for x in minX...maxX {
@@ -1583,41 +1578,40 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
                     let coord = BlockCoord(x: x, y: y, z: z)
                     guard let type = blocks[coord], !type.isTranslucent, type != .door, type != .bed else { continue }
                     let center = SIMD3<Float>(Float(x) + 0.5, Float(y) + 0.5, Float(z) + 0.5)
-
-                    for (_, corners, nOff) in faces {
-                        let nb = BlockCoord(x: x + nOff.0, y: y + nOff.1, z: z + nOff.2)
-                        if let nbType = blocks[nb], !nbType.isTranslucent { continue }
-
-                        let baseIdx = Int32(positions.count)
+                    for (corners, nOff) in faces {
+                        let neighbor = BlockCoord(x: x + nOff.0, y: y + nOff.1, z: z + nOff.2)
+                        if let neighborType = blocks[neighbor], !neighborType.isTranslucent { continue }
+                        let baseIndex = Int32(positionsByType[type, default: []].count)
                         for i in 0..<4 {
-                            let c = center + corners[i]
-                            positions.append(SCNVector3(c.x, c.y, c.z))
-                            uvs.append(quadUVs[i])
+                            let point = center + corners[i]
+                            positionsByType[type, default: []].append(SCNVector3(point.x, point.y, point.z))
+                            uvsByType[type, default: []].append(quadUVs[i])
                         }
-                        indices.append(contentsOf: [baseIdx, baseIdx + 1, baseIdx + 2, baseIdx, baseIdx + 2, baseIdx + 3])
+                        indicesByType[type, default: []].append(contentsOf: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex, baseIndex + 2, baseIndex + 3])
                     }
                 }
             }
         }
 
-        guard !indices.isEmpty else { return }
-        let vertexSource = SCNGeometrySource(vertices: positions)
-        let uvSource = SCNGeometrySource(textureCoordinates: uvs)
-        let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
-        let geom = SCNGeometry(sources: [vertexSource, uvSource], elements: [element])
-
-        let mat = SCNMaterial()
-        mat.diffuse.contents = PixelTextureFactory.image(for: .stone)
-        mat.diffuse.magnificationFilter = .nearest
-        mat.diffuse.minificationFilter = .nearest
-        mat.isDoubleSided = false
-        geom.materials = [mat]
-
-        let node = SCNNode(geometry: geom)
-        node.name = "chunk_\(chunk.cx)_\(chunk.cz)"
-        node.opacity = 0.01
-        chunkMeshesRootNode.addChildNode(node)
-        chunkMeshNodes[chunk] = node
+        let chunkContainer = SCNNode()
+        chunkContainer.name = "chunk_\(chunk.cx)_\(chunk.cz)"
+        for type in positionsByType.keys.sorted(by: { $0.rawValue < $1.rawValue }) {
+            guard let positions = positionsByType[type], let uvs = uvsByType[type], let indices = indicesByType[type], !indices.isEmpty else { continue }
+            let vertexSource = SCNGeometrySource(vertices: positions)
+            let uvSource = SCNGeometrySource(textureCoordinates: uvs)
+            let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
+            let geometry = SCNGeometry(sources: [vertexSource, uvSource], elements: [element])
+            let material = SCNMaterial()
+            material.diffuse.contents = type.previewImage
+            material.diffuse.magnificationFilter = .nearest
+            material.diffuse.minificationFilter = .nearest
+            material.isDoubleSided = false
+            geometry.materials = [material]
+            chunkContainer.addChildNode(SCNNode(geometry: geometry))
+        }
+        guard !chunkContainer.childNodes.isEmpty else { return }
+        chunkMeshesRootNode.addChildNode(chunkContainer)
+        chunkMeshNodes[chunk] = chunkContainer
     }
 
     private func clearAllChunkMeshes() {
@@ -2506,7 +2500,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         case .endgame:
             kinds = [.enderman, .enderman, .slime, .skeleton, .zombie, .blaze]
         }
-        for idx in 0..<min(kinds.count, 6) {
+        for idx in 0..<min(kinds.count, 3) {
             let offsetX = (idx % 2 == 0 ? 1 : -1) * Int.random(in: 4...9)
             let offsetZ = (idx < 2 ? 1 : -1) * Int.random(in: 4...9)
             let mx = cx + offsetX
@@ -2546,7 +2540,7 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
         // Hostile mobs can also inhabit nearby cave pockets instead of every spawn
         // being placed on the surface. The cap keeps the scene workload bounded.
         if activeDimension == .overworld && mobs.count < 9 {
-            for _ in 0..<4 where mobs.count < 9 {
+            for _ in 0..<1 where mobs.count < 5 {
                 let caveX = cx + Int.random(in: -7...7)
                 let caveZ = cz + Int.random(in: -7...7)
                 let surface = terrainHeight(x: caveX, z: caveZ, biome: BiomeType.biomeAt(x: caveX, z: caveZ, dimension: .overworld))
@@ -3584,7 +3578,22 @@ final class VoxelWorldController: NSObject, ObservableObject, SCNSceneRendererDe
     private func setBlockInternal(coord: BlockCoord, type: BlockType, markModified: Bool = true) {
         blocks[coord] = type
         if markModified { modifiedCoords.insert(coord) }
-        if let existing = blockNodes[coord] {
+
+        let isChunkMeshBlock = (0...11).contains(coord.y) && !type.isTranslucent && type != .door && type != .bed
+        if isChunkMeshBlock {
+            if let existing = blockNodes.removeValue(forKey: coord) {
+                existing.removeFromParentNode()
+            }
+            // Keep only a lightweight light-anchor node for emissive blocks.
+            if type.emitsLight && type != .redstoneLamp {
+                let lightAnchor = SCNNode()
+                lightAnchor.position = coord.scnVector
+                lightAnchor.name = "block_\(coord.x)_\(coord.y)_\(coord.z)"
+                configureBlockLight(on: lightAnchor, for: type)
+                blocksRootNode.addChildNode(lightAnchor)
+                blockNodes[coord] = lightAnchor
+            }
+        } else if let existing = blockNodes[coord] {
             existing.geometry = sharedGeometries[type]
             existing.position = coord.scnVector
             existing.renderingOrder = type.isTranslucent ? 10 : 0

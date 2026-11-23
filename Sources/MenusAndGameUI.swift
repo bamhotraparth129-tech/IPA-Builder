@@ -567,9 +567,9 @@ struct VoxelGameView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .clipped()
-                .padding(.horizontal, 6)
-                .padding(.top, 6)
+                .padding(.horizontal, 14)
+                .padding(.top, 18)
+                .frame(height: 56, alignment: .top)
 
                 VStack(spacing: 4) {
                     HStack(spacing: 6) {
@@ -670,7 +670,7 @@ struct VoxelGameView: View {
 
                 Spacer()
 
-                HStack(alignment: .bottom) {
+                ZStack(alignment: .bottomLeading) {
                     VStack(spacing: 6) {
                         MoveHoldButton(systemImage: "chevron.up", onPress: { world.setMoveInput(forward: 1, strafe: 0) }, onRelease: { world.setMoveInput(forward: 0, strafe: 0) })
                         HStack(spacing: 6) {
@@ -679,10 +679,11 @@ struct VoxelGameView: View {
                             MoveHoldButton(systemImage: "chevron.right", onPress: { world.setMoveInput(forward: 0, strafe: 1) }, onRelease: { world.setMoveInput(forward: 0, strafe: 0) })
                         }
                     }
-
-                    Spacer()
-
-                    VStack(spacing: 8) {
+                    .padding(.leading, 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottomTrailing) {
+                    VStack(spacing: 7) {
                         Button { world.respawnPlayer() } label: {
                             Text("SPAWN")
                                 .font(.caption2.bold())
@@ -691,7 +692,6 @@ struct VoxelGameView: View {
                                 .padding(.vertical, 8)
                                 .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
                         }
-
                         Button { world.scanForTreasure() } label: {
                             Label("TREASURE MAP", systemImage: "map.fill")
                                 .font(.caption2.bold())
@@ -718,7 +718,6 @@ struct VoxelGameView: View {
                                     .background(world.isInBoat ? Color.blue.opacity(0.75) : Color.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 9))
                             }
                         }
-
                         HStack(spacing: 7) {
                             Button {
                                 world.activeTool = .place
@@ -743,7 +742,6 @@ struct VoxelGameView: View {
                                     .background(.red.opacity(0.78), in: RoundedRectangle(cornerRadius: 10))
                             }
                         }
-
                         Button { world.jump() } label: {
                             Text("JUMP")
                                 .font(.caption.bold())
@@ -753,11 +751,10 @@ struct VoxelGameView: View {
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
-                    .padding(.trailing, 2)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: 205, alignment: .trailing)
+                    .padding(.trailing, 8)
                 }
-                .frame(maxWidth: .infinity, alignment: .bottom)
-                .padding(.horizontal, 4)
+                .frame(maxWidth: .infinity)
 
                 // Minecraft-style survival HUD: hearts and hunger directly above the centered 9-slot hotbar.
                 VStack(spacing: 4) {
